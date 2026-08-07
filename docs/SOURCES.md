@@ -23,9 +23,16 @@ Validated repository digest for the published results:
 
 The current ModelZoo lists Qwen3.6 support for K100AI, and the v1.1 tag records the addition of K100AI support. Our launch scripts preserve `--disable-custom-all-reduce` from the tested K100AI runtime recipe.
 
-## ModelScope W8A8 checkpoint and DCU adaptation
+## ModelScope W8A8 checkpoints and DCU adaptation
 
-The **weight shards** in the validated test environment came from:
+Historical server records show that two different Qwen3.6-35B-A3B W8A8 checkpoints were downloaded independently on June 10, 2026:
+
+- `Eco-Tech/Qwen3.6-35B-A3B-w8a8`: an Ascend-oriented checkpoint stored as 10 `quant_model_weights-*.safetensors` shards. Shell history retains the explicit ModelScope download command. This checkpoint was **not** used for the final K100AI optimization results.
+- `metax-tech/Qwen3.6-35B-A3B-W8A8`: the checkpoint used by this project, stored as 8 `model-*.safetensors` shards. ModelScope download-lock metadata was created at 15:49:23 (+08:00), immediately before files began appearing in the local DCU deployment directory.
+
+The metax-tech provenance is independently confirmed by the local ModelScope `.msc` metadata: its per-file revision hashes are real upload commits in the public metax-tech repository, and representative local shard SHA256 values exactly match the corresponding Git LFS `oid sha256` values.
+
+The **weight shards** in the validated K100AI test environment therefore came from:
 
 `metax-tech/Qwen3.6-35B-A3B-W8A8`
 

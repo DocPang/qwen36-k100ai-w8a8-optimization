@@ -39,7 +39,29 @@
 
 这是复现本项目最关键的一点。
 
-### 2.1 权重来自魔搭公开模型，并不存在我们找到的公开 `-DCU` 权重仓库
+### 2.1 服务器上曾经同时存在两套独立下载的 W8A8
+
+这两套模型不是同一个目录的复制品，也不是“普通 W8A8 转成 DCU 版”的关系。
+
+历史记录能够明确区分它们：
+
+- **Eco-Tech 版本**：`Eco-Tech/Qwen3.6-35B-A3B-w8a8`
+  - ModelScope 下载锁时间：2026-06-10 14:19:55 (+08:00)
+  - shell history 仍保留了明确的 `modelscope download --model Eco-Tech/Qwen3.6-35B-A3B-w8a8 ...` 命令
+  - 本地文件为 10 个 `quant_model_weights-*.safetensors` 分片
+  - 模型卡写明精度测试平台是 Ascend 800T A3 / vllm-ascend
+  - **这不是本项目最终 K100AI 优化所使用的模型**
+
+- **本项目主线版本**：`metax-tech/Qwen3.6-35B-A3B-W8A8`
+  - ModelScope 下载锁时间：2026-06-10 15:49:23 (+08:00)
+  - 1 秒后本地 `Qwen3.6-35B-A3B-W8A8-DCU` 目录开始写入文件
+  - 下载得到 8 个 `model-*.safetensors` 分片
+  - 目录中的 ModelScope `.msc` revision 与 metax-tech 仓库真实上传 commit 一一对应
+  - 抽查的本地权重 SHA256 与该仓库 Git LFS `oid sha256` 完全一致
+
+因此可以确定：**`W8A8-DCU` 主线是第二次独立从 ModelScope 下载的 metax-tech 模型，不是由 Eco-Tech 普通 W8A8 目录复制、转换或重新量化得到的。**
+
+### 2.2 上游公开 model ID 不带 `-DCU`
 
 我们实际使用的 8 个 `safetensors` W8A8 权重来自魔搭：
 
@@ -56,7 +78,7 @@ metax-tech/Qwen3.6-35B-A3B-W8A8-DCU   -> 不存在
 
 所以仓库里的 `Qwen3.6-35B-A3B-W8A8-DCU` **不是另一个公开模型 ID**，而是我们给“已经完成 DCU 配置适配的本地模型目录”使用的名称。
 
-### 2.2 真正的 DCU 适配发生在 `config.json`
+### 2.3 真正的 DCU 适配发生在 `config.json`
 
 魔搭原始模型的权重本身就是 W8A8，但原始 `config.json` 没有我们在海光 vLLM 0.18.1 环境中实际使用的 `compressed-tensors` 量化描述。
 
@@ -102,7 +124,7 @@ scripts/apply_dcu_config.py
 
 如果模型已经适配过，则脚本是幂等的，不会重复破坏配置。
 
-### 2.3 为什么启动脚本会强制检查 DCU config？
+### 2.4 为什么启动脚本会强制检查 DCU config？
 
 为了防止“下载完魔搭模型直接启动”导致复现环境与本项目实际测试环境不一致，`serve_nomtp.sh` 和 `serve_mtp3.sh` 都会检查：
 
@@ -427,7 +449,29 @@ See [`results/RESULTS.md`](results/RESULTS.md).
 
 This is the most important reproducibility detail.
 
-### 2.1 The weights come from the public ModelScope W8A8 model
+### 2.1 Two independently downloaded W8A8 checkpoints existed on the server
+
+These were not copies of the same directory, and the DCU deployment was not produced by converting the ordinary W8A8 directory.
+
+The historical evidence distinguishes them clearly:
+
+- **Eco-Tech checkpoint**: `Eco-Tech/Qwen3.6-35B-A3B-w8a8`
+  - ModelScope download-lock timestamp: 2026-06-10 14:19:55 (+08:00)
+  - shell history still contains the explicit `modelscope download --model Eco-Tech/Qwen3.6-35B-A3B-w8a8 ...` command
+  - stored as 10 `quant_model_weights-*.safetensors` shards
+  - its model card targets Ascend 800T A3 / vllm-ascend
+  - **this is not the checkpoint used for the final K100AI optimization results**
+
+- **Checkpoint used by this project**: `metax-tech/Qwen3.6-35B-A3B-W8A8`
+  - ModelScope download-lock timestamp: 2026-06-10 15:49:23 (+08:00)
+  - files began appearing in the local `Qwen3.6-35B-A3B-W8A8-DCU` directory one second later
+  - stored as 8 `model-*.safetensors` shards
+  - the ModelScope `.msc` revisions match real upload commits in the metax-tech repository
+  - representative local shard SHA256 values exactly match the repository Git LFS `oid sha256` values
+
+Therefore the evidence shows that **the DCU mainline was a second, independent ModelScope download of the metax-tech checkpoint. It was not copied, converted, or requantized from the Eco-Tech W8A8 directory.**
+
+### 2.2 The public upstream model ID does not include `-DCU`
 
 The eight W8A8 `safetensors` shards used by the validated deployment came from:
 
@@ -439,7 +483,7 @@ We verified that the public repository without the suffix exists, while the gues
 
 Therefore `Qwen3.6-35B-A3B-W8A8-DCU` is **not another public model ID**. It is the local name we use for the checkpoint after applying the validated DCU configuration.
 
-### 2.2 The DCU adaptation is an exact `config.json` replacement
+### 2.3 The DCU adaptation is an exact `config.json` replacement
 
 The original ModelScope W8A8 checkpoint config does not contain the `compressed-tensors` quantization metadata used by the validated Hygon vLLM 0.18.1 deployment.
 
