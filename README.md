@@ -1,5 +1,7 @@
 # Qwen3.6-35B-A3B W8A8 inference optimization for Hygon K100AI
 
+**English** | [简体中文](README.zh-CN.md)
+
 Single-GPU inference tuning for **Qwen3.6-35B-A3B W8A8** on **Hygon K100AI (gfx928)** using the Hygon community vLLM 0.18.1 / DTK 26.04 environment.
 
 > [!IMPORTANT]
