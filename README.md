@@ -249,6 +249,28 @@ export PORT=8000
 bash scripts/serve_nomtp.sh
 ```
 
+对应的核心 `vllm serve` 参数如下，供手工部署和排障时参考。该命令假设已经按 `scripts/serve_nomtp.sh` 挂载 R180 runtime patch 和 K100AI MoE 配置：
+
+```bash
+vllm serve /models/qwen36-w8a8 \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --trust-remote-code \
+  --dtype bfloat16 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.92 \
+  --quantization compressed-tensors \
+  --served-model-name qwen36-35b-a3b-w8a8-k100ai \
+  --language-model-only \
+  --generation-config vllm \
+  --disable-custom-all-reduce \
+  -cc.mode=3 \
+  -cc.inductor_compile_config '{"combo_kernels": false, "benchmark_combo_kernel": false}' \
+  --cudagraph-capture-sizes 1 \
+  --max-num-seqs 32
+```
+
 预期稳定 Decode：
 
 ```text
@@ -265,6 +287,29 @@ export GPU_ID=0
 export PORT=8000
 
 bash scripts/serve_mtp3.sh
+```
+
+对应的核心 `vllm serve` 参数如下。R184 除了加载自己的 runtime patch，还开启 Qwen 原生 MTP3：
+
+```bash
+vllm serve /models/qwen36-w8a8 \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --trust-remote-code \
+  --dtype bfloat16 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.92 \
+  --quantization compressed-tensors \
+  --served-model-name qwen36-35b-a3b-w8a8-k100ai \
+  --language-model-only \
+  --generation-config vllm \
+  --disable-custom-all-reduce \
+  -cc.mode=3 \
+  -cc.inductor_compile_config '{"combo_kernels": false, "benchmark_combo_kernel": false}' \
+  --cudagraph-capture-sizes 1 4 \
+  --max-num-seqs 32 \
+  --speculative-config '{"model":"/models/qwen36-w8a8","method":"qwen3_next_mtp","num_speculative_tokens":3,"quantization":"compressed-tensors"}'
 ```
 
 保守稳定参考：
@@ -564,6 +609,28 @@ export PORT=8000
 bash scripts/serve_nomtp.sh
 ```
 
+Core `vllm serve` arguments for manual deployment/debugging are shown below. This assumes the R180 runtime patch and K100AI MoE config are mounted exactly as done by `scripts/serve_nomtp.sh`:
+
+```bash
+vllm serve /models/qwen36-w8a8 \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --trust-remote-code \
+  --dtype bfloat16 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.92 \
+  --quantization compressed-tensors \
+  --served-model-name qwen36-35b-a3b-w8a8-k100ai \
+  --language-model-only \
+  --generation-config vllm \
+  --disable-custom-all-reduce \
+  -cc.mode=3 \
+  -cc.inductor_compile_config '{"combo_kernels": false, "benchmark_combo_kernel": false}' \
+  --cudagraph-capture-sizes 1 \
+  --max-num-seqs 32
+```
+
 Expected steady-state decode:
 
 ```text
@@ -577,6 +644,29 @@ export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
 export GPU_ID=0
 export PORT=8000
 bash scripts/serve_mtp3.sh
+```
+
+Core `vllm serve` arguments are below. R184 also enables the model-native MTP3 speculative path:
+
+```bash
+vllm serve /models/qwen36-w8a8 \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --trust-remote-code \
+  --dtype bfloat16 \
+  --tensor-parallel-size 1 \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.92 \
+  --quantization compressed-tensors \
+  --served-model-name qwen36-35b-a3b-w8a8-k100ai \
+  --language-model-only \
+  --generation-config vllm \
+  --disable-custom-all-reduce \
+  -cc.mode=3 \
+  -cc.inductor_compile_config '{"combo_kernels": false, "benchmark_combo_kernel": false}' \
+  --cudagraph-capture-sizes 1 4 \
+  --max-num-seqs 32 \
+  --speculative-config '{"model":"/models/qwen36-w8a8","method":"qwen3_next_mtp","num_speculative_tokens":3,"quantization":"compressed-tensors"}'
 ```
 
 Conservative expected decode:
