@@ -1,6 +1,6 @@
 # Benchmark results
 
-Hardware: **Hygon K100 AI (gfx928)**, one GPU, TP=1, single concurrency.
+Hardware: **Hygon K100AI (gfx928)**, one GPU, TP=1, single concurrency.
 
 ## Comparable hot-path results
 

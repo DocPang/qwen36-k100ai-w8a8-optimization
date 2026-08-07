@@ -1,5 +1,5 @@
 {
-  "hardware": "Hygon K100 AI (gfx928)",
+  "hardware": "Hygon K100AI (gfx928)",
   "tp": 1,
   "concurrency": 1,
   "date": "2026-08-07",
@@ -16,6 +16,6 @@
   },
   "notes": [
     "MTP throughput is prompt/acceptance-rate dependent",
-    "K100 and K100 AI are different products; tests used K100 AI only"
+    "K100 and K100AI are different products; tests used K100AI only"
   ]
 }

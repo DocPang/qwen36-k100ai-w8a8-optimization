@@ -11,4 +11,4 @@ Upstream projects and artifacts retain their own licenses and trademarks:
 
 No model weights, Docker image layers, private host configuration, credentials, IP addresses, or private infrastructure data are included in this repository.
 
-K100 and K100 AI are different accelerator models. The code and benchmark results in this repository were validated on K100 AI only.
+K100 and K100AI are different accelerator models. The code and benchmark results in this repository were validated on K100AI only.

@@ -1,16 +1,16 @@
-# Qwen3.6-35B-A3B W8A8 inference optimization for Hygon K100 AI
+# Qwen3.6-35B-A3B W8A8 inference optimization for Hygon K100AI
 
-Single-GPU inference tuning for **Qwen3.6-35B-A3B W8A8** on **Hygon K100 AI (gfx928)** using the Hygon community vLLM 0.18.1 / DTK 26.04 environment.
+Single-GPU inference tuning for **Qwen3.6-35B-A3B W8A8** on **Hygon K100AI (gfx928)** using the Hygon community vLLM 0.18.1 / DTK 26.04 environment.
 
 > [!IMPORTANT]
-> **K100 and K100 AI are different accelerator models.**
-> This repository was developed and validated on **K100 AI** only. It does **not** claim that the same kernels, tile choices, performance, or even compatibility apply to K100.
+> **K100 and K100AI are different accelerator models.**
+> This repository was developed and validated on **K100AI** only. It does **not** claim that the same kernels, tile choices, performance, or even compatibility apply to K100.
 
 This repository contains the runtime patches and configuration that produced our best stable single-concurrency results. It intentionally excludes private infrastructure details, model weights, Docker image contents, and experimental branches that did not enter the final configuration.
 
 ## Results
 
-All numbers below are single-GPU, tensor-parallel size 1, single-concurrency decode results on K100 AI.
+All numbers below are single-GPU, tensor-parallel size 1, single-concurrency decode results on K100AI.
 
 | Configuration | MTP | Decode throughput | Notes |
 |---|---:|---:|---|
@@ -31,7 +31,7 @@ See [`results/RESULTS.md`](results/RESULTS.md) for the benchmark table and metho
 
 ### 1. Shape-aware W8A8 Linear kernels
 
-Decode on this model is dominated by very small-M matrix multiplications. The vendor/general heuristic was not ideal for K100 AI/gfx928, so exact `(M, K, N)` decode shapes were mapped to tuned Triton configurations.
+Decode on this model is dominated by very small-M matrix multiplications. The vendor/general heuristic was not ideal for K100AI/gfx928, so exact `(M, K, N)` decode shapes were mapped to tuned Triton configurations.
 
 Two important no-MTP `M=1` projections improved in microbenchmarks from:
 
@@ -44,7 +44,7 @@ Both were validated with zero numerical difference against the reference kernel 
 
 The 248,320-token vocabulary makes the output projection unusually expensive at decode time. The runtime patch installs a decode-size W8A8 path for the large `lm_head` instead of leaving it on the slower default route.
 
-### 3. K100 AI-specific MoE configuration
+### 3. K100AI-specific MoE configuration
 
 Qwen3.6-35B-A3B uses 256 routed experts and activates 8 per token. We provide the tuned vLLM FusedMoE configuration:
 
@@ -104,7 +104,7 @@ Current ModelZoo page:
 
 <https://developer.sourcefind.cn/codes/modelzoo/qwen3.6/-/blob/main/README.md>
 
-The Qwen3.6 ModelZoo v1.1 tag explicitly added **K100AI** support. The public launch scripts in this repository also keep `--disable-custom-all-reduce`, which is the K100 AI launch requirement used by the tested Hygon vLLM runtime family.
+The Qwen3.6 ModelZoo v1.1 tag explicitly added **K100AI** support. The public launch scripts in this repository also keep `--disable-custom-all-reduce`, which is the K100AI launch requirement used by the tested Hygon vLLM runtime family.
 
 ### W8A8 model used in this project
 
@@ -131,7 +131,7 @@ The original unquantized Qwen model is:
 
 ## Quick start
 
-Clone this repository on the K100 AI host and download the ModelScope checkpoint first.
+Clone this repository on the K100AI host and download the ModelScope checkpoint first.
 
 ### No MTP / R180
 
@@ -175,7 +175,7 @@ A sanitized, infrastructure-independent Codex procedure is provided in [`docs/RE
 ## Repository layout
 
 ```text
-configs/                 K100 AI FusedMoE config used by vLLM
+configs/                 K100AI FusedMoE config used by vLLM
 patches/r180_nomtp/      best no-MTP runtime patch
 patches/r184_mtp3/       best MTP3 runtime patch
 scripts/serve_nomtp.sh   generic single-GPU R180 launcher
@@ -186,7 +186,7 @@ results/                 sanitized benchmark summary
 
 ## Scope and limitations
 
-- Validated on **Hygon K100 AI / gfx928 only**.
+- Validated on **Hygon K100AI / gfx928 only**.
 - K100 was **not** used for these results.
 - Tuned for single-concurrency / low-concurrency decode. High-concurrency throughput needs separate tuning.
 - MTP performance depends on speculative-token acceptance rate.

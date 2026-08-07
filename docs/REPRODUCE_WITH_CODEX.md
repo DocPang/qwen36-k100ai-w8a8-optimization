@@ -1,12 +1,12 @@
 # Reproduce with Codex
 
-Use this prompt after cloning the repository on a host equipped with **Hygon K100 AI**.
+Use this prompt after cloning the repository on a host equipped with **Hygon K100AI**.
 
 ```text
-Reproduce the Qwen3.6-35B-A3B W8A8 K100 AI inference results in this repository.
+Reproduce the Qwen3.6-35B-A3B W8A8 K100AI inference results in this repository.
 
 Hard requirements:
-- The accelerator must be Hygon K100 AI (gfx928). K100 is a different product; do not treat it as equivalent.
+- The accelerator must be Hygon K100AI (gfx928). K100 is a different product; do not treat it as equivalent.
 - Use one GPU only (TP=1) for each benchmark service.
 - Do not modify unrelated running services or GPUs.
 - Do not report a kernel microbenchmark as a win unless full-model steady-state throughput also improves.
@@ -22,7 +22,7 @@ Model:
 - Do not download or substitute a different quantization without clearly labeling the experiment.
 
 Procedure:
-1. Verify the GPU model is K100 AI and the container reports the expected vLLM/DTK stack.
+1. Verify the GPU model is K100AI and the container reports the expected vLLM/DTK stack.
 2. Set MODEL_DIR to the downloaded checkpoint.
 3. Start scripts/serve_nomtp.sh on one free GPU.
 4. Wait for /v1/models, issue one short warm-up request, then run scripts/benchmark_openai.py with max_tokens=512 for at least 3 steady-state rounds.

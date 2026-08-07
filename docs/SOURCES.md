@@ -21,7 +21,7 @@ Validated repository digest for the published results:
 
 `sha256:13ce550647063a7fe76e87fd173986175946e5046bd36980c4289c60a4bdd811`
 
-The current ModelZoo lists Qwen3.6 support for K100AI, and the v1.1 tag records the addition of K100AI support. Our launch scripts preserve `--disable-custom-all-reduce` from the tested K100 AI runtime recipe.
+The current ModelZoo lists Qwen3.6 support for K100AI, and the v1.1 tag records the addition of K100AI support. Our launch scripts preserve `--disable-custom-all-reduce` from the tested K100AI runtime recipe.
 
 ## ModelScope W8A8 checkpoint
 
@@ -47,4 +47,4 @@ Official Qwen release information:
 
 ## Important naming note
 
-**K100 and K100 AI are different accelerator products.** All performance numbers in this repository were obtained on K100 AI. `K100_AI.json` is also the upstream vLLM device-config filename used by the tested Hygon runtime.
+**K100 and K100AI are different accelerator products.** All performance numbers in this repository were obtained on K100AI. `K100_AI.json` is also the upstream vLLM device-config filename used by the tested Hygon runtime.

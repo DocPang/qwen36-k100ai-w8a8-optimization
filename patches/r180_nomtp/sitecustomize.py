@@ -1,9 +1,9 @@
-"""Public runtime patch validated on Hygon K100 AI (gfx928) only.
+"""Public runtime patch validated on Hygon K100AI (gfx928) only.
 
-K100 and K100 AI are different accelerator models. This code does not claim
+K100 and K100AI are different accelerator models. This code does not claim
 compatibility or performance parity with K100.
 
-K100 AI/gfx928 runtime optimization patch for Qwen3.6-35B-A3B W8A8.
+K100AI/gfx928 runtime optimization patch for Qwen3.6-35B-A3B W8A8.
 
 This module is loaded through PYTHONPATH/sitecustomize. It keeps the stock
 compressed-tensors loader and all non-MoE kernels unchanged. For decode-sized
@@ -96,7 +96,7 @@ if _LM_HEAD_ENABLED:
 
     class _K100AILMHeadW8A8Method(_QuantizeMethodBase):
         def create_weights(self, *args, **kwargs):
-            raise RuntimeError("K100 AI lm_head method is installed after weight loading")
+            raise RuntimeError("K100AI lm_head method is installed after weight loading")
 
         def apply(
             self, layer: torch.nn.Module, x: torch.Tensor,
@@ -141,7 +141,7 @@ if _LM_HEAD_ENABLED:
         del weight, qweight, scale
         torch.cuda.empty_cache()
         print(
-            "[K100 AI lm_head W8A8] enabled "
+            "[K100AI lm_head W8A8] enabled "
             f"shape={tuple(layer.weight.shape)} "
             f"quantize_s={_time.perf_counter() - started:.3f}",
             flush=True,
@@ -151,7 +151,7 @@ if _LM_HEAD_ENABLED:
         _k100aiai_process_unquantized_embedding
     )
     print(
-        f"[K100 AI lm_head W8A8] hook installed, runtime M <= {_LM_HEAD_MAX_M}",
+        f"[K100AI lm_head W8A8] hook installed, runtime M <= {_LM_HEAD_MAX_M}",
         flush=True,
     )
 
@@ -239,7 +239,7 @@ if _TRACE_LINEAR_SHAPES and not _LINEAR_ENABLED:
     signal.signal(signal.SIGUSR1, _dump_trace_counts)
     _trace_ct_mod.triton_scaled_mm = _trace_scaled_mm
     _trace_linear_mod.triton_scaled_mm = _trace_scaled_mm
-    print("[K100 AI Linear shape trace] enabled; send SIGUSR1 to dump counts", flush=True)
+    print("[K100AI Linear shape trace] enabled; send SIGUSR1 to dump counts", flush=True)
 
 if _LINEAR_ENABLED:
     from aiter.ops.triton.gemm_a8w8 import gemm_a8w8 as _aiter_gemm_a8w8
@@ -490,6 +490,6 @@ if _LINEAR_ENABLED:
     _ct_scaled_mm_mod.triton_scaled_mm = _k100aiai_triton_scaled_mm
     _linear_kernel_mod.triton_scaled_mm = _k100aiai_triton_scaled_mm
     print(
-        f"[K100 AI single-card W8A8 Linear] enabled, runtime M <= {_LINEAR_MAX_M}",
+        f"[K100AI single-card W8A8 Linear] enabled, runtime M <= {_LINEAR_MAX_M}",
         flush=True,
     )
