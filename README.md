@@ -110,22 +110,36 @@ The Qwen3.6 ModelZoo v1.1 tag explicitly added **K100AI** support. The public la
 
 ### W8A8 model used in this project
 
-The weight files used for these results came from ModelScope:
+The **weight shards** used for these results came from ModelScope:
 
 **`metax-tech/Qwen3.6-35B-A3B-W8A8`**
 
 <https://www.modelscope.cn/models/metax-tech/Qwen3.6-35B-A3B-W8A8>
 
-Download example:
+However, the published K100AI results did **not** use that repository completely unchanged. The upstream `config.json` has no `quantization_config`. During the original June deployment we created a local **DCU-adapted checkpoint directory** named `Qwen3.6-35B-A3B-W8A8-DCU` and replaced only `config.json` with the compressed-tensors metadata required by the tested Hygon vLLM 0.18.1 stack. The eight safetensors weight shards remained the ModelScope files.
+
+This repository includes the exact validated DCU config:
+
+`configs/Qwen3.6-35B-A3B-W8A8-DCU.config.json`
+
+Validated hashes:
+
+- original ModelScope `config.json`: `ba62ca6d8a773ab4c15407acf0653761198c4bcb74d7e8d82edc88132c4ba6a6`
+- DCU-adapted `config.json`: `b550b28342afd4c61841e2684b06da15f3a0ec3c807ceb22259b0074be9975ae`
+
+Download directly into a `-DCU` local directory, then apply the validated config:
 
 ```bash
 pip install modelscope
 modelscope download \
   --model metax-tech/Qwen3.6-35B-A3B-W8A8 \
-  --local_dir /path/to/Qwen3.6-35B-A3B-W8A8
+  --local_dir /path/to/Qwen3.6-35B-A3B-W8A8-DCU
+
+python3 scripts/apply_dcu_config.py \
+  --model-dir /path/to/Qwen3.6-35B-A3B-W8A8-DCU
 ```
 
-The downloaded model card declares Apache License 2.0. The checkpoint is loaded by vLLM through `compressed-tensors` W8A8 (static INT8 per-channel weights + dynamic INT8 per-token activations).
+The adapter adds the `compressed-tensors` W8A8 description used by our service: static INT8 per-channel weights, dynamic INT8 per-token activations, and the validated ignore list for non-quantized modules.
 
 The original unquantized Qwen model is:
 
@@ -133,12 +147,12 @@ The original unquantized Qwen model is:
 
 ## Quick start
 
-Clone this repository on the K100AI host and download the ModelScope checkpoint first.
+Clone this repository on the K100AI host, download the ModelScope weight shards, and **apply the DCU config before starting vLLM**. Using the raw upstream `config.json` is not the configuration that produced the published results.
 
 ### No MTP / R180
 
 ```bash
-export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
 export GPU_ID=0
 export PORT=8000
 bash scripts/serve_nomtp.sh
@@ -147,7 +161,7 @@ bash scripts/serve_nomtp.sh
 ### MTP3 / R184
 
 ```bash
-export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
 export GPU_ID=0
 export PORT=8000
 bash scripts/serve_mtp3.sh

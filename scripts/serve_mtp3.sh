@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-: "${MODEL_DIR:?Set MODEL_DIR to the ModelScope metax-tech/Qwen3.6-35B-A3B-W8A8 checkpoint directory}"
+: "${MODEL_DIR:?Set MODEL_DIR to the DCU-adapted Qwen3.6-35B-A3B-W8A8-DCU directory}"
 
 IMAGE="${IMAGE:-harbor.sourcefind.cn:5443/dcu/admin/base/custom:vllm018-ubuntu22.04-dtk26.04-qwen3.6-20260423@sha256:13ce550647063a7fe76e87fd173986175946e5046bd36980c4289c60a4bdd811}"
 GPU_ID="${GPU_ID:-0}"
@@ -14,6 +14,19 @@ CACHE_DIR="${CACHE_DIR:-$ROOT_DIR/.cache/r184-mtp3}"
 MODEL_DIR="$(cd "$MODEL_DIR" && pwd)"
 PATCH_DIR="$ROOT_DIR/patches/r184_mtp3"
 MOE_CONFIG="$ROOT_DIR/configs/E=256,N=512,device_name=K100_AI.json"
+DCU_CONFIG_SHA256="b550b28342afd4c61841e2684b06da15f3a0ec3c807ceb22259b0074be9975ae"
+
+if command -v sha256sum >/dev/null 2>&1; then
+  MODEL_CONFIG_SHA256="$(sha256sum "$MODEL_DIR/config.json" | awk '{print $1}')"
+else
+  MODEL_CONFIG_SHA256="$(shasum -a 256 "$MODEL_DIR/config.json" | awk '{print $1}')"
+fi
+if [[ "$MODEL_CONFIG_SHA256" != "$DCU_CONFIG_SHA256" ]]; then
+  echo "ERROR: MODEL_DIR is not using the validated DCU config." >&2
+  echo "Run: python3 $ROOT_DIR/scripts/apply_dcu_config.py --model-dir $MODEL_DIR" >&2
+  echo "Current config SHA256: $MODEL_CONFIG_SHA256" >&2
+  exit 2
+fi
 
 mkdir -p "$CACHE_DIR"
 

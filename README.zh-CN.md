@@ -114,26 +114,41 @@ Qwen3.6 ModelZoo v1.1 标签明确写有“新增 K100AI 支持，及 FP8 数据
 
 ### 本项目使用的 W8A8 模型
 
-本次结果使用的 W8A8 权重来自魔搭社区：
+本次结果使用的 **8 个 safetensors 权重分片**来自魔搭社区：
 
 **`metax-tech/Qwen3.6-35B-A3B-W8A8`**
 
 <https://www.modelscope.cn/models/metax-tech/Qwen3.6-35B-A3B-W8A8>
 
-下载示例：
+但需要特别说明：**我们实际跑出本文成绩的并不是魔搭仓库原封不动下载后的目录。** 魔搭原始 `config.json` 中没有 `quantization_config`。6 月部署时，我们将下载目录作为本地 **DCU 适配版** `Qwen3.6-35B-A3B-W8A8-DCU` 使用，并只替换了 `config.json`，补上了海光 vLLM 0.18.1 识别该 W8A8 权重所需的 `compressed-tensors` 量化描述。8 个权重分片本身没有重新量化或修改。
+
+仓库现已提供实际验证过的 DCU config：
+
+`configs/Qwen3.6-35B-A3B-W8A8-DCU.config.json`
+
+校验值：
+
+- 魔搭原始 `config.json`：`ba62ca6d8a773ab4c15407acf0653761198c4bcb74d7e8d82edc88132c4ba6a6`
+- 本项目实际使用的 DCU `config.json`：`b550b28342afd4c61841e2684b06da15f3a0ec3c807ceb22259b0074be9975ae`
+
+推荐直接下载到带 `-DCU` 后缀的本地目录，然后应用仓库中的已验证 config：
 
 ```bash
 pip install modelscope
 modelscope download \
   --model metax-tech/Qwen3.6-35B-A3B-W8A8 \
-  --local_dir /path/to/Qwen3.6-35B-A3B-W8A8
+  --local_dir /path/to/Qwen3.6-35B-A3B-W8A8-DCU
+
+python3 scripts/apply_dcu_config.py \
+  --model-dir /path/to/Qwen3.6-35B-A3B-W8A8-DCU
 ```
 
-该 checkpoint 通过 vLLM 的 `compressed-tensors` W8A8 路径加载：
+应用后使用的 W8A8 描述为：
 
 - 权重：静态 INT8、per-channel
 - 激活：动态 INT8、per-token
-- 相关输出路径保持 BF16
+- `quant_method=compressed-tensors`
+- 使用经过验证的 194 项非量化模块 ignore 列表
 
 原始未量化 Qwen 模型：
 
@@ -141,12 +156,12 @@ modelscope download \
 
 ## 快速开始
 
-在 K100AI 服务器上克隆本仓库，并先下载魔搭模型。
+在 K100AI 服务器上克隆本仓库，下载魔搭权重后，**必须先应用 DCU config，再启动 vLLM**。直接拿魔搭原始 `config.json` 并不是本项目跑出公开成绩时使用的配置。
 
 ### 无 MTP / R180
 
 ```bash
-export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
 export GPU_ID=0
 export PORT=8000
 bash scripts/serve_nomtp.sh
@@ -155,7 +170,7 @@ bash scripts/serve_nomtp.sh
 ### MTP3 / R184
 
 ```bash
-export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
 export GPU_ID=0
 export PORT=8000
 bash scripts/serve_mtp3.sh

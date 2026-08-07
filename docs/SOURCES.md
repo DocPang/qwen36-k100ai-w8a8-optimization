@@ -23,9 +23,9 @@ Validated repository digest for the published results:
 
 The current ModelZoo lists Qwen3.6 support for K100AI, and the v1.1 tag records the addition of K100AI support. Our launch scripts preserve `--disable-custom-all-reduce` from the tested K100AI runtime recipe.
 
-## ModelScope W8A8 checkpoint
+## ModelScope W8A8 checkpoint and DCU adaptation
 
-The exact downloaded model card in the test environment identifies its upstream model ID as:
+The **weight shards** in the validated test environment came from:
 
 `metax-tech/Qwen3.6-35B-A3B-W8A8`
 
@@ -33,7 +33,20 @@ Public page:
 
 <https://www.modelscope.cn/models/metax-tech/Qwen3.6-35B-A3B-W8A8>
 
-The model card declares Apache License 2.0 and provides the same ModelScope download ID.
+The server-side download metadata and file revisions match that ModelScope repository. The eight safetensors files were not re-quantized or rewritten after download.
+
+There is an important reproducibility detail: the upstream repository's original `config.json` contains no `quantization_config`. During the June deployment, the checkpoint was used as a local DCU-adapted directory named `Qwen3.6-35B-A3B-W8A8-DCU`, with only `config.json` replaced by a compressed-tensors W8A8 configuration compatible with the tested Hygon vLLM 0.18.1 stack.
+
+The repository includes that exact validated config as:
+
+`configs/Qwen3.6-35B-A3B-W8A8-DCU.config.json`
+
+SHA256 provenance:
+
+- upstream ModelScope config: `ba62ca6d8a773ab4c15407acf0653761198c4bcb74d7e8d82edc88132c4ba6a6`
+- validated DCU config: `b550b28342afd4c61841e2684b06da15f3a0ec3c807ceb22259b0074be9975ae`
+
+Use `scripts/apply_dcu_config.py` after downloading the ModelScope weights. The public launch scripts deliberately refuse to start if the validated DCU config hash is not present.
 
 ## Original Qwen model
 
