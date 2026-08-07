@@ -1,0 +1,21 @@
+{
+  "hardware": "Hygon K100 AI (gfx928)",
+  "tp": 1,
+  "concurrency": 1,
+  "date": "2026-08-07",
+  "upstream_hot_baseline_nomtp_tok_s": 19.873,
+  "historical_june_nomtp_tok_s": 12.55,
+  "r180_nomtp": {
+    "llm_speedtest_avg_tok_s": 53.46,
+    "fixed_512_tok_s": 54.6124
+  },
+  "r184_mtp3": {
+    "fixed_512_median_tok_s": 85.29,
+    "llm_speedtest_avg_tok_s": 96.84,
+    "observed_peak_tok_s": 107.44
+  },
+  "notes": [
+    "MTP throughput is prompt/acceptance-rate dependent",
+    "K100 and K100 AI are different products; tests used K100 AI only"
+  ]
+}
