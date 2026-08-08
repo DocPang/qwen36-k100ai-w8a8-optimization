@@ -35,7 +35,11 @@ Procedure:
 9. Start scripts/serve_mtp3.sh on one free GPU.
 10. Warm up, then run the same fixed benchmark. A conservative expected result is around 85 tok/s; speculative acceptance can make some workloads substantially faster.
 11. Compare the result with results/RESULTS.md. Do not claim the 107 tok/s peak as a universal rate.
-12. Save all changed files and benchmark output. If any source edit is made, run python -m py_compile on both sitecustomize.py patches before serving.
+12. If the target is a long-context Agent instead of a short-context benchmark, stop the benchmark service and start `scripts/serve_agent_mtp3.sh`. This profile uses R199 runtime fastpaths, MTP3, 262K context, Prefix Cache, multimodal support, Tool Calling, and `max_num_batched_tokens=4096`.
+13. For the Agent profile, verify: `/v1/models`, one text request, one structured Tool Calling request, one image request, a repeated-prefix cold/hot A/B, and at least 4 fixed 512-token hot runs. The published GPU0 result is about 85.21 tok/s median with identical SHA256 across the four runs.
+14. Read `docs/200+轮实验：研究路线、失败尝试与结论.md` before trying new tuning ideas so rejected routes are not repeated blindly.
+15. Read `docs/面向国产AI加速卡的大模型推理专项优化方法.md` when adapting the workflow to another accelerator or model; reuse the methodology, not the exact K100AI tile parameters.
+16. Save all changed files and benchmark output. If any source edit is made, run `python -m py_compile` on all public `patches/*/sitecustomize.py` files before serving.
 ```
 
 ## Why this prompt avoids local infrastructure assumptions

@@ -2,7 +2,7 @@
   "hardware": "Hygon K100AI (gfx928)",
   "tp": 1,
   "concurrency": 1,
-  "date": "2026-08-07",
+  "date": "2026-08-08",
   "upstream_hot_baseline_nomtp_tok_s": 19.873,
   "historical_june_nomtp_tok_s": 12.55,
   "r180_nomtp": {
@@ -12,10 +12,24 @@
   "r184_mtp3": {
     "fixed_512_median_tok_s": 85.29,
     "llm_speedtest_avg_tok_s": 96.84,
-    "observed_peak_tok_s": 107.44
+    "observed_peak_tok_s": 107.44,
+    "profile": "32K context, no Prefix Cache, text-only benchmark profile"
+  },
+  "r202_agent_mtp3": {
+    "max_model_len": 262144,
+    "prefix_cache": true,
+    "multimodal": true,
+    "max_num_batched_tokens": 4096,
+    "fixed_512_gpu0_tok_s": [85.08399766938398, 84.81359838526811, 85.32819291458644, 85.49408785996847],
+    "fixed_512_gpu0_median_tok_s": 85.2060952919852,
+    "fixed_512_outputs_identical": true,
+    "repeated_prefix_prompt_tokens_approx": 55820,
+    "repeated_prefix_cold_s_approx": 73.84,
+    "repeated_prefix_hot_s_approx": 5.83
   },
   "notes": [
     "MTP throughput is prompt/acceptance-rate dependent",
+    "R184 and R202 target different deployment profiles and should not be treated as identical benchmark configurations",
     "K100 and K100AI are different products; tests used K100AI only"
   ]
 }

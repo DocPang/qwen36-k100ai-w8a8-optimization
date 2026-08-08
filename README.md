@@ -13,6 +13,15 @@
 
 本项目针对 **Qwen3.6-35B-A3B W8A8** 在 **海光 K100AI** 上的单卡、低并发 Decode 性能进行优化，并提供可直接复现的运行补丁、MoE 配置、DCU 模型配置、启动脚本和测速脚本。
 
+### 这项专项优化对其他用户和厂商有什么意义？
+
+这里的最终参数当然是为 **一个指定模型 × 一个指定计算卡 × 一个指定场景** 找到的，不能把 K100AI 上的 tile、wave 或 chunked-prefill 参数原样复制到另一张卡上。但 200+ 轮实验真正沉淀下来的，是一套可迁移的方法：如何从真实 shape 出发定位瓶颈，如何区分 kernel 微基准和完整模型收益，如何优化 MoE / INT8 / Runtime / MTP / Prefix Cache，以及如何用质量门禁避免“跑得快但模型行为已经变了”。
+
+对于其他海光卡、其他国产AI加速卡和其他模型，**应该复用这套实验方法，而不是照抄最终参数**；对于芯片/软件栈厂商，则可以进一步把真实LLM shape数据库、小M kernel、量化融合、runtime同步审计和自动A/B流程产品化。
+
+- [《面向国产AI加速卡的大模型推理专项优化方法》](docs/面向国产AI加速卡的大模型推理专项优化方法.md)
+- [《200+轮实验：研究路线、失败尝试与结论》](docs/200+轮实验：研究路线、失败尝试与结论.md)
+
 ## 1. 做了哪些优化
 
 最终保留的优化主要有以下几项。
@@ -72,6 +81,27 @@ quantization = compressed-tensors
 
 MTP 的最终 token 仍由目标模型验证。实际速度取决于 speculative token 接受率，因此不同提示词的速度会有明显变化。
 
+### 1.7 R199/R202：Prefix Cache / Agent Runtime 快路径
+
+为了把纯 benchmark 版本变成长期 Agent 服务，后续又加入了：
+
+- 262K 上下文；
+- Prefix Cache；
+- Tool Calling；
+- 多模态；
+- `max_num_batched_tokens=4096`；
+- HCU/Mamba-align 常规 Decode 快路径；
+- accepted-token metadata 直接留在 GPU，删除不再消费的 D2H copy / event / 重复 scratch 开销。
+
+这条路线解决了混合 GDN 模型开启 Prefix Cache 后 Decode 从约 85 tok/s 降到约 73 tok/s 的问题。最终 R202 长期 Agent 配置在保留 Prefix Cache、262K 和多模态的情况下重新回到 **约 85 tok/s**。
+
+公开复现入口：
+
+```text
+patches/r199_agent/sitecustomize.py
+scripts/serve_agent_mtp3.sh
+```
+
 ---
 
 ## 2. 性能结果
@@ -92,8 +122,11 @@ MTP 的最终 token 仍由目标模型验证。实际速度取决于 speculative
 | R184 固定 512-token | MTP3 | **85.29 tok/s 中位数** |
 | R184 `llm_speedtest` | MTP3 | **96.84 tok/s 平均** |
 | R184 最高实测 | MTP3 | **107.44 tok/s** |
+| R202 长期 Agent（262K + Prefix + 多模态） | MTP3 | **85.21 tok/s 中位数（GPU0，4轮固定512）** |
 
 MTP 速度与提示词接受率有关。部署时建议把 **约 85 tok/s** 视为更保守的稳定参考，而不是把 107 tok/s 当作所有请求的固定速度。
+
+R202 与 R184 的测试目标不同：R184 表示 32K、关闭 Prefix Cache 的纯 Decode 高速路径；R202 表示功能完整的长期 Agent 路径。R202 在 GPU0 的4次固定512-token热态复测为 **85.08 / 84.81 / 85.33 / 85.49 tok/s**，四轮输出 SHA256 完全一致。
 
 详细结果见：
 
@@ -320,6 +353,31 @@ vllm serve /models/qwen36-w8a8 \
 
 高 speculative acceptance 的请求可能达到 100+ tok/s。
 
+### 5.6 启动 R202：长期 Agent / 262K / Prefix Cache / 多模态
+
+如果目标不是短上下文 benchmark，而是长期 Agent 服务，使用：
+
+```bash
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
+export GPU_ID=0
+export PORT=8000
+
+bash scripts/serve_agent_mtp3.sh
+```
+
+默认配置包括：
+
+- R199 runtime fastpath；
+- MTP3；
+- 262144 最大上下文；
+- Prefix Cache；
+- Tool Calling；
+- 多模态；
+- `max_num_batched_tokens=4096`；
+- `restart=unless-stopped`。
+
+该配置是当前推荐的交互式/Agent长期运行方案。若目标只是短上下文纯Decode benchmark，则仍可使用R184脚本。
+
 ---
 
 ## 6. 测速
@@ -361,12 +419,18 @@ configs/
 patches/
   r180_nomtp/sitecustomize.py
   r184_mtp3/sitecustomize.py
+  r199_agent/sitecustomize.py
 
 scripts/
   apply_dcu_config.py
   serve_nomtp.sh
   serve_mtp3.sh
+  serve_agent_mtp3.sh
   benchmark_openai.py
+
+docs/
+  面向国产AI加速卡的大模型推理专项优化方法.md
+  200+轮实验：研究路线、失败尝试与结论.md
 
 results/
   RESULTS.md
@@ -391,6 +455,11 @@ results/
 # English
 
 This project optimizes **Qwen3.6-35B-A3B W8A8** for single-GPU, low-concurrency decoding on **Hygon K100AI / gfx928**. It provides the final runtime patches, tuned MoE config, validated DCU model config, launch scripts, and benchmark scripts required to reproduce the results.
+
+The exact kernel parameters are specific to this model/GPU/workload combination, but the project also documents the general optimization methodology and the lessons from 200+ experiments. Other accelerator users should reuse the **profiling, shape-inventory, A/B, quality-gating, runtime and workload methodology**, not blindly copy K100AI-specific tiles.
+
+- [General methodology (Chinese): 面向国产AI加速卡的大模型推理专项优化方法](docs/面向国产AI加速卡的大模型推理专项优化方法.md)
+- [200+ experiment review (Chinese): 研究路线、失败尝试与结论](docs/200+轮实验：研究路线、失败尝试与结论.md)
 
 > [!IMPORTANT]
 > **K100 and K100AI are different accelerator models.** All results in this repository were measured on **K100AI** only.
@@ -452,6 +521,19 @@ quantization = compressed-tensors
 
 Speculative tokens are still verified by the target model. Throughput therefore depends on acceptance rate.
 
+### 1.7 R199/R202 Agent runtime path
+
+The long-context Agent profile adds 262K context, Prefix Cache, Tool Calling and multimodal support. R199 removes redundant D2H/event work from the common hybrid-GDN/Mamba-align decode path and keeps accepted-token metadata on GPU. R202 combines that runtime fastpath with `max_num_batched_tokens=4096` and MTP3.
+
+This recovers the Prefix-Cache Agent path from roughly 73 tok/s back to roughly 85 tok/s while retaining the full Agent feature set.
+
+Public entry points:
+
+```text
+patches/r199_agent/sitecustomize.py
+scripts/serve_agent_mtp3.sh
+```
+
 ---
 
 ## 2. Results
@@ -471,8 +553,9 @@ Test conditions:
 | R184 fixed 512-token | MTP3 | **85.29 tok/s median** |
 | R184 `llm_speedtest` | MTP3 | **96.84 tok/s average** |
 | R184 peak observed | MTP3 | **107.44 tok/s** |
+| R202 long-context Agent profile (262K + prefix cache + multimodal) | MTP3 | **85.21 tok/s median, 4 fixed-512 runs on GPU0** |
 
-For production planning, ~85 tok/s is a more conservative MTP3 reference than the 107 tok/s peak.
+For production planning, ~85 tok/s is a more conservative MTP3 reference than the 107 tok/s peak. R202 is the current full-feature Agent profile; the four GPU0 runs were 85.08 / 84.81 / 85.33 / 85.49 tok/s with identical output SHA256.
 
 See:
 
@@ -677,6 +760,19 @@ Conservative expected decode:
 
 High-acceptance workloads may exceed 100 tok/s.
 
+### 5.6 R202 long-context Agent profile
+
+For a long-running Agent rather than a short-context benchmark:
+
+```bash
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
+export GPU_ID=0
+export PORT=8000
+bash scripts/serve_agent_mtp3.sh
+```
+
+The default profile enables R199 runtime fastpaths, MTP3, 262K context, Prefix Cache, multimodal support, Tool Calling, and `max_num_batched_tokens=4096`.
+
 ---
 
 ## 6. Benchmark
@@ -701,10 +797,14 @@ The first request may trigger Triton/compile work. Do not mix cold-start latency
 configs/
 patches/r180_nomtp/
 patches/r184_mtp3/
+patches/r199_agent/
 scripts/apply_dcu_config.py
 scripts/serve_nomtp.sh
 scripts/serve_mtp3.sh
+scripts/serve_agent_mtp3.sh
 scripts/benchmark_openai.py
+docs/面向国产AI加速卡的大模型推理专项优化方法.md
+docs/200+轮实验：研究路线、失败尝试与结论.md
 results/
 ```
 

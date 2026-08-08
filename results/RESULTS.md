@@ -12,6 +12,37 @@ Hardware: **Hygon K100AI (gfx928)**, one GPU, TP=1, single concurrency.
 | R184 | MTP3 | 85.29 tok/s median | 6 repeated fixed 512-token runs |
 | R184 | MTP3 | 96.84 tok/s average | 4 prompt lengths, workload-dependent MTP acceptance |
 | R184 | MTP3 | 107.44 tok/s peak | one high-acceptance prompt length |
+| R202 Agent profile | MTP3 | **85.21 tok/s median** | 4 fixed 512-token GPU0 runs; 262K + Prefix Cache + multimodal |
+
+### R202, long-context Agent profile
+
+R202 keeps the features required by a long-running Agent service while recovering most of the Decode throughput lost when Prefix Cache is enabled for the hybrid GDN/Mamba path.
+
+Configuration highlights:
+
+- R199 HCU/Mamba-align runtime fastpath;
+- accepted-token metadata stays on GPU for the common decode path;
+- `max_num_batched_tokens=4096`;
+- MTP3;
+- `max_model_len=262144`;
+- Prefix Cache enabled;
+- multimodal enabled;
+- Tool Calling enabled.
+
+Final GPU0 fixed-512 hot runs:
+
+| Round | Decode tok/s |
+|---:|---:|
+| 1 | 85.08 |
+| 2 | 84.81 |
+| 3 | 85.33 |
+| 4 | 85.49 |
+
+Median: **85.21 tok/s**. All four outputs had the same SHA256.
+
+A standard ~55.8K-token repeated-prefix validation on the equivalent R202 profile showed roughly **73.8 s cold -> 5.8 s hot**, demonstrating that the recovered Decode speed does not remove the long-prefix cache benefit.
+
+The previous full-feature Agent baseline was about 73.5-73.8 tok/s, so the R199 + 4096 path recovers roughly **15%+** Decode throughput while keeping long context, Prefix Cache and multimodal capability.
 
 ### R180, no MTP
 
@@ -42,3 +73,5 @@ An older June report recorded 12.55 tok/s for single-card/no-MTP. We preserve th
 - R184 was compared with its same-mode MTP3 baseline using fixed prompts: text, token sequence, and logprobs were identical in the validation set.
 - R180's two dominant `M=1` projection kernels were numerically identical to the reference kernel in microbenchmarks (`relative-L2 = 0`).
 - No-MTP and MTP3 are separate inference modes and are **not** claimed to produce byte-identical generations to each other.
+- R202 fixed-512 GPU0 validation produced identical output SHA256 across all four hot runs.
+- The 4096/8192 compile-range experiments showed that deterministic `temperature=0` text can still diverge on near-tie tokens when the compiled numeric path changes; therefore structured output, Tool Calling and task-level gates remain part of deployment validation.
