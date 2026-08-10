@@ -2,18 +2,29 @@
   "hardware": "Hygon K100AI (gfx928)",
   "tp": 1,
   "concurrency": 1,
-  "date": "2026-08-08",
+  "date": "2026-08-10",
+  "software": {
+    "vllm": "0.18.1",
+    "dtk": "26.04",
+    "torch": "2.10.0",
+    "triton": "3.6.x Hygon build",
+    "docker_image": "harbor.sourcefind.cn:5443/dcu/admin/base/custom:vllm018-ubuntu22.04-dtk26.04-qwen3.6-20260423",
+    "docker_digest": "sha256:13ce550647063a7fe76e87fd173986175946e5046bd36980c4289c60a4bdd811"
+  },
+  "model": {
+    "modelscope_id": "metax-tech/Qwen3.6-35B-A3B-W8A8",
+    "dcu_config_sha256": "b550b28342afd4c61841e2684b06da15f3a0ec3c807ceb22259b0074be9975ae"
+  },
   "upstream_hot_baseline_nomtp_tok_s": 19.873,
-  "historical_june_nomtp_tok_s": 12.55,
   "r180_nomtp": {
     "llm_speedtest_avg_tok_s": 53.46,
     "fixed_512_tok_s": 54.6124
   },
   "r184_mtp3": {
     "fixed_512_median_tok_s": 85.29,
-    "llm_speedtest_avg_tok_s": 96.84,
-    "observed_peak_tok_s": 107.44,
-    "profile": "32K context, no Prefix Cache, text-only benchmark profile"
+    "historical_llm_speedtest_avg_tok_s": 96.84,
+    "historical_observed_peak_tok_s": 107.44,
+    "profile": "older 32K text-only benchmark profile"
   },
   "r202_agent_mtp3": {
     "max_model_len": 262144,
@@ -21,15 +32,35 @@
     "multimodal": true,
     "max_num_batched_tokens": 4096,
     "fixed_512_gpu0_tok_s": [85.08399766938398, 84.81359838526811, 85.32819291458644, 85.49408785996847],
-    "fixed_512_gpu0_median_tok_s": 85.2060952919852,
-    "fixed_512_outputs_identical": true,
-    "repeated_prefix_prompt_tokens_approx": 55820,
-    "repeated_prefix_cold_s_approx": 73.84,
-    "repeated_prefix_hot_s_approx": 5.83
+    "fixed_512_gpu0_median_tok_s": 85.2060952919852
+  },
+  "r269_mtp3": {
+    "status": "current accepted single-GPU champion",
+    "max_model_len": 262144,
+    "prefix_cache": true,
+    "multimodal": true,
+    "max_num_batched_tokens": 4096,
+    "gpu7_fixed_512_tok_s": [107.4490, 107.4696, 107.4034, 107.3989, 107.4706, 107.4694],
+    "gpu7_mean_tok_s": 107.4435,
+    "gpu7_median_tok_s": 107.4592,
+    "gpu1_formal_mean_tok_s": 106.3198,
+    "gpu1_formal_median_tok_s": 106.2957,
+    "same_gpu_r265_mean_tok_s": 100.4988,
+    "same_gpu_mean_gain_percent": 5.79,
+    "fixed_512_output_sha256": "80c82006a973ecc78fa3fb7a8483b76bc311693bdf277cb296365be0db6c7e00",
+    "quality": {
+      "greedy_text_identical": "5/5",
+      "logprob_text_identical": "5/5",
+      "logprob_tokens_identical": "5/5",
+      "max_logprob_abs_diff": 0.0,
+      "multimodal_response_identical": true,
+      "mtp_counters_identical": true
+    }
   },
   "notes": [
-    "MTP throughput is prompt/acceptance-rate dependent",
-    "R184 and R202 target different deployment profiles and should not be treated as identical benchmark configurations",
-    "K100 and K100AI are different products; tests used K100AI only"
+    "R269 fixed-512 is the primary version-comparison benchmark.",
+    "MTP throughput is prompt/acceptance-rate dependent; application prompts can be materially slower or faster.",
+    "Prefix cache hit rate should be checked separately when benchmarking prefill; it is not the explanation for R269 decode gains.",
+    "K100 and K100AI are different products; tests used K100AI only."
   ]
 }

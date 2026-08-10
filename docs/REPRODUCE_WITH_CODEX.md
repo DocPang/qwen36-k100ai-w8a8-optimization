@@ -1,47 +1,42 @@
-# Reproduce with Codex
+# Reproduce R269 with Codex
 
-Use this prompt after cloning the repository on a host equipped with **Hygon K100AI**.
+Use the prompt below after cloning this repository on a Linux host with **Hygon K100AI / gfx928**.
 
 ```text
-Reproduce the Qwen3.6-35B-A3B W8A8 K100AI inference results in this repository.
+Reproduce the current accepted Qwen3.6-35B-A3B W8A8 single-GPU result in this repository.
 
 Hard requirements:
-- The accelerator must be Hygon K100AI (gfx928). K100 is a different product; do not treat it as equivalent.
-- Use one GPU only (TP=1) for each benchmark service.
+- The accelerator must be Hygon K100AI / gfx928. K100 is a different product.
+- Use one GPU only (TP=1).
 - Do not modify unrelated running services or GPUs.
-- Do not report a kernel microbenchmark as a win unless full-model steady-state throughput also improves.
-- Keep a correctness record (request success, output SHA256, and when comparing the same inference mode, token/logprob checks where available).
-
-Upstream runtime:
-- Follow docs/SOURCES.md.
-- Use Hygon community vLLM 0.18.1 / DTK 26.04 image:
-  harbor.sourcefind.cn:5443/dcu/admin/base/custom:vllm018-ubuntu22.04-dtk26.04-qwen3.6-20260423@sha256:13ce550647063a7fe76e87fd173986175946e5046bd36980c4289c60a4bdd811
-
-Model:
-- Download the weight shards from ModelScope model metax-tech/Qwen3.6-35B-A3B-W8A8.
-- Use a local directory named Qwen3.6-35B-A3B-W8A8-DCU for the validated deployment form.
-- The raw upstream config.json is not the config used for the published K100AI results. Run scripts/apply_dcu_config.py before serving.
-- Do not download or substitute a different quantization without clearly labeling the experiment.
+- Use the pinned vLLM 0.18.1 / DTK 26.04 image from README.md.
+- Use ModelScope checkpoint metax-tech/Qwen3.6-35B-A3B-W8A8 only.
+- Do not substitute another quantization or vLLM release while claiming reproduction.
+- Treat the first Triton/compile request as warmup, not steady-state throughput.
 
 Procedure:
-1. Verify the GPU model is K100AI and the container reports the expected vLLM/DTK stack.
-2. Download the ModelScope checkpoint into a local Qwen3.6-35B-A3B-W8A8-DCU directory.
-3. Run `python3 scripts/apply_dcu_config.py --model-dir <that-directory>` and verify the resulting config SHA256 is `b550b28342afd4c61841e2684b06da15f3a0ec3c807ceb22259b0074be9975ae`.
-4. Set MODEL_DIR to that DCU-adapted checkpoint.
-5. Start scripts/serve_nomtp.sh on one free GPU.
-6. Wait for /v1/models, issue one short warm-up request, then run scripts/benchmark_openai.py with max_tokens=512 for at least 3 steady-state rounds.
-7. Record throughput and output hashes. R180 should be around 53-55 tok/s on the validated configuration.
-8. Stop that test service cleanly.
-9. Start scripts/serve_mtp3.sh on one free GPU.
-10. Warm up, then run the same fixed benchmark. A conservative expected result is around 85 tok/s; speculative acceptance can make some workloads substantially faster.
-11. Compare the result with results/RESULTS.md. Do not claim the 107 tok/s peak as a universal rate.
-12. If the target is a long-context Agent instead of a short-context benchmark, stop the benchmark service and start `scripts/serve_agent_mtp3.sh`. This profile uses R199 runtime fastpaths, MTP3, 262K context, Prefix Cache, multimodal support, Tool Calling, and `max_num_batched_tokens=4096`.
-13. For the Agent profile, verify: `/v1/models`, one text request, one structured Tool Calling request, one image request, a repeated-prefix cold/hot A/B, and at least 4 fixed 512-token hot runs. The published GPU0 result is about 85.21 tok/s median with identical SHA256 across the four runs.
-14. Read `docs/200+轮实验：研究路线、失败尝试与结论.md` before trying new tuning ideas so rejected routes are not repeated blindly.
-15. Read `docs/面向国产AI加速卡的大模型推理专项优化方法.md` when adapting the workflow to another accelerator or model; reuse the methodology, not the exact K100AI tile parameters.
-16. Save all changed files and benchmark output. If any source edit is made, run `python -m py_compile` on all public `patches/*/sitecustomize.py` files before serving.
+1. Check that Docker and the K100AI devices are usable.
+2. Install ModelScope CLI if necessary: `python3 -m pip install -U modelscope`.
+3. Set a free GPU and port, then run:
+   `MODEL_DIR=$HOME/models/Qwen3.6-35B-A3B-W8A8-DCU GPU_ID=0 PORT=8000 bash scripts/quickstart_r269.sh`
+4. Confirm `/v1/models` is healthy.
+5. Inspect container logs and confirm the R269 marker:
+   `[K100 R269 split MoE stage2] exact M4 second-GEMM override installed`
+6. Run:
+   `python3 -m pip install -r requirements.txt`
+   `python3 scripts/benchmark_fixed_512.py --base http://127.0.0.1:8000 --model qwen36-35b-a3b-w8a8-k100ai --rounds 6 --max-tokens 512 --out results/reproduction_r269.json`
+7. Record every run, mean, median and SHA256. On the validated stack, the formal same-GPU reference is about 106.3 tok/s; GPU7 reached about 107.46 tok/s median.
+8. The reference fixed-512 SHA256 is `80c82006a973ecc78fa3fb7a8483b76bc311693bdf277cb296365be0db6c7e00`. If the output differs, report the difference instead of silently treating it as the same reproduction.
+9. If a generic webpage benchmark is also used, label it separately. Its random prompts can produce lower or higher MTP acceptance and should not replace the fixed benchmark.
+10. Check `Prefix cache hit rate` when investigating cache effects. Prefix Cache primarily affects repeated-prefix prefill/TTFT and should not be assumed to explain decode changes.
+11. Read `docs/R269_RELEASE_NOTES.md` for the accepted optimization and quality gates before attempting further changes.
+12. Run `python3 scripts/check_release.py` and `bash -n scripts/*.sh` before publishing any modification.
+
+Safety / scientific rules:
+- Never claim a kernel microbenchmark as an end-to-end win without full-model A/B.
+- Preserve correctness records: success, output hash, and token/logprob checks where applicable.
+- Do not steal a production port or GPU for testing.
+- Keep changed launch parameters in the benchmark report.
 ```
 
-## Why this prompt avoids local infrastructure assumptions
-
-The public launch scripts take `MODEL_DIR`, `GPU_ID`, `PORT`, `CACHE_DIR`, and `IMAGE` from environment variables. No private hostname, IP, user directory, production port, or local mount layout is required.
+The public scripts deliberately take paths, GPU IDs and ports from environment variables so the repository does not depend on the original private infrastructure.

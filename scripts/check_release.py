@@ -7,7 +7,7 @@ import py_compile
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-for p in ROOT.glob("patches/*/sitecustomize.py"):
+for p in ROOT.glob("patches/*/*.py"):
     py_compile.compile(str(p), doraise=True)
 
 forbidden = [
