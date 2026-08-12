@@ -39,6 +39,10 @@ R389 therefore optimizes the **performance envelope**, not one benchmark point.
 
 Mean Decode: **53.29 tok/s**.
 
+Full-page browser evidence from the same 10-point run:
+
+![R389 512→32K full-page measured benchmark](assets/r389_adaptive_512_32k_full.png)
+
 The 6K→32K region forms a stable no-MTP plateau instead of continuing to pay fixed MTP3 overhead.
 
 ## Quality gates

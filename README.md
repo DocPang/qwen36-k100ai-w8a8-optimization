@@ -38,6 +38,27 @@ R389 把它改成服务内部自动调度：
 
 10 点 512→32K Decode 曲线：**88.33 / 67.31 / 69.81 / 70.27 / 56.66 / 40.08 / 40.03 / 39.19 / 39.11 / 37.68 tok/s**，平均 **53.29 tok/s**。约 32K natural needle 3/3 PASS，确定性重复输出 SHA256 一致。
 
+### R389 实测速度曲线
+
+测试条件：**Hygon K100AI / gfx928，单卡 TP=1，单并发，输出 256 tokens，Prefix Cache 开启，target `max_model_len=262144`**。
+
+| Prompt tokens | TTFT (ms) | Prefill tok/s | Decode tok/s | 运行状态 |
+|---:|---:|---:|---:|---|
+| 512 | 1455.99 | 1117.45 | **88.33** | MTP3 |
+| 1,024 | 1677.93 | 1542.89 | **67.31** | MTP3 |
+| 2,048 | 2274.53 | 1636.56 | **69.81** | MTP3 |
+| 3,072 | 2048.49 | 3020.52 | **70.27** | MTP3 |
+| 4,096 | 2465.01 | 2855.68 | **56.66** | MTP3 |
+| 6,144 | 4944.87 | 1577.85 | **40.08** | cutoff → no-MTP |
+| 8,192 | 4245.51 | 2561.30 | **40.03** | no-MTP |
+| 12,288 | 6490.03 | 2259.39 | **39.19** | no-MTP |
+| 16,384 | 9299.41 | 1985.46 | **39.11** | no-MTP |
+| 32,768 | 27191.92 | 1253.10 | **37.68** | no-MTP |
+
+> 这张表来自同一个服务实例、同一次模型加载的连续实测。6,144 tokens 之后由服务内部自动退出 MTP，没有中途修改启动参数。
+
+![R389 512→32K 完整网页实测截图](docs/assets/r389_adaptive_512_32k_full.png)
+
 同时，后来发现 R237 multimodal direct-embedding shortcut 对 arbitrary-length chunked-prefill tail 存在语义风险，因此 R389 默认显式关闭 R237。
 
 **新用户默认复现 R389：**
@@ -567,6 +588,27 @@ R389 turns that parameter choice into an in-server scheduling policy:
 - **one container, one model load, no mid-run parameter rewrite or restart.**
 
 The validated 10-point 512→32K Decode curve is **88.33 / 67.31 / 69.81 / 70.27 / 56.66 / 40.08 / 40.03 / 39.19 / 39.11 / 37.68 tok/s**, with a **53.29 tok/s** mean. Natural ~32K needle retrieval passed 3/3, and deterministic repeated outputs had identical SHA256.
+
+### R389 measured speed curve
+
+Test conditions: **Hygon K100AI / gfx928, one GPU, TP=1, single concurrency, 256 output tokens, Prefix Cache enabled, target `max_model_len=262144`**.
+
+| Prompt tokens | TTFT (ms) | Prefill tok/s | Decode tok/s | Runtime state |
+|---:|---:|---:|---:|---|
+| 512 | 1455.99 | 1117.45 | **88.33** | MTP3 |
+| 1,024 | 1677.93 | 1542.89 | **67.31** | MTP3 |
+| 2,048 | 2274.53 | 1636.56 | **69.81** | MTP3 |
+| 3,072 | 2048.49 | 3020.52 | **70.27** | MTP3 |
+| 4,096 | 2465.01 | 2855.68 | **56.66** | MTP3 |
+| 6,144 | 4944.87 | 1577.85 | **40.08** | cutoff → no-MTP |
+| 8,192 | 4245.51 | 2561.30 | **40.03** | no-MTP |
+| 12,288 | 6490.03 | 2259.39 | **39.19** | no-MTP |
+| 16,384 | 9299.41 | 1985.46 | **39.11** | no-MTP |
+| 32,768 | 27191.92 | 1253.10 | **37.68** | no-MTP |
+
+> All points above come from the same service instance and one model load. The runtime exits MTP internally at the 6,144-token cutoff; no launch parameter is changed mid-run.
+
+![R389 512→32K full-page measured benchmark](docs/assets/r389_adaptive_512_32k_full.png)
 
 R389 also disables the historical R237 multimodal direct-embedding shortcut by default because later arbitrary-length chunked-prefill-tail testing exposed semantic risk.
 
