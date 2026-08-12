@@ -1,0 +1,40 @@
+{
+  "release": "R389",
+  "date": "2026-08-12",
+  "model": "Qwen3.6-35B-A3B-W8A8-DCU",
+  "hardware": "Hygon K100AI / gfx928",
+  "tp": 1,
+  "concurrency": 1,
+  "output_tokens": 256,
+  "target_max_model_len": 262144,
+  "adaptive_policy": {
+    "below_computed_tokens": 6144,
+    "policy_below_cutoff": "MTP3",
+    "policy_at_or_above_cutoff": "no-MTP target single-token decode"
+  },
+  "curve": [
+    {"prompt_tokens": 512, "ttft_ms": 1455.99, "prefill_tok_s": 1117.45, "decode_tok_s": 88.33},
+    {"prompt_tokens": 1024, "ttft_ms": 1677.93, "prefill_tok_s": 1542.89, "decode_tok_s": 67.31},
+    {"prompt_tokens": 2048, "ttft_ms": 2274.53, "prefill_tok_s": 1636.56, "decode_tok_s": 69.81},
+    {"prompt_tokens": 3072, "ttft_ms": 2048.49, "prefill_tok_s": 3020.52, "decode_tok_s": 70.27},
+    {"prompt_tokens": 4096, "ttft_ms": 2465.01, "prefill_tok_s": 2855.68, "decode_tok_s": 56.66},
+    {"prompt_tokens": 6144, "ttft_ms": 4944.87, "prefill_tok_s": 1577.85, "decode_tok_s": 40.08},
+    {"prompt_tokens": 8192, "ttft_ms": 4245.51, "prefill_tok_s": 2561.30, "decode_tok_s": 40.03},
+    {"prompt_tokens": 12288, "ttft_ms": 6490.03, "prefill_tok_s": 2259.39, "decode_tok_s": 39.19},
+    {"prompt_tokens": 16384, "ttft_ms": 9299.41, "prefill_tok_s": 1985.46, "decode_tok_s": 39.11},
+    {"prompt_tokens": 32768, "ttft_ms": 27191.92, "prefill_tok_s": 1253.10, "decode_tok_s": 37.68}
+  ],
+  "mean_prefill_tok_s": 1914.85,
+  "mean_decode_tok_s": 53.29,
+  "quality_gates": {
+    "exact_string": "PASS",
+    "arithmetic_137x29": "PASS: 3973",
+    "code_extraction": "PASS: Q7ZK-4815",
+    "deterministic_repeat_3x": "PASS: identical SHA256",
+    "natural_32k_needle": "PASS: 3/3"
+  },
+  "notes": [
+    "R269 fixed-512 106-107 tok/s remains a valid short-context local peak, but is no longer the recommended deployment profile.",
+    "R389 is validated as a 512-to-32K adaptive-curve release; it is not yet claimed as the formal 262K full-range champion."
+  ]
+}

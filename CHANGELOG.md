@@ -2,9 +2,24 @@
 
 This file records accepted public releases. New optimization work should be added here and to the top-level Release History in `README.md`; historical documentation should not be replaced.
 
+## R389 — 2026-08-12
+
+Current **recommended deployment profile** for Qwen3.6-35B-A3B W8A8 on Hygon K100AI: context-aware adaptive MTP, validated across 512→32K.
+
+- Base family: cumulative R269/R305 non-HCU-Flash stack.
+- Policy: MTP3 below 6,144 computed tokens; no-MTP target single-token decode at/above 6,144.
+- One service instance and one model load; no mid-run parameter changes or restart.
+- 10-point Decode curve, 512→32K: 88.33 / 67.31 / 69.81 / 70.27 / 56.66 / 40.08 / 40.03 / 39.19 / 39.11 / 37.68 tok/s.
+- Mean Decode: 53.29 tok/s.
+- Natural ~32K needle retrieval: 3/3 PASS; deterministic repeated output SHA256 identical.
+- R237 direct-embedding shortcut disabled by default due later arbitrary-length chunked-prefill-tail semantic risk.
+- Scope: R389 is accepted for the 512→32K curve; it is not yet claimed as the formal 262K full-range champion.
+- Reproduce: `scripts/quickstart.sh`.
+- Details: `docs/R389_RELEASE_NOTES.md` and `docs/ADAPTIVE_MTP_SCHEDULING.md`.
+
 ## R269 — 2026-08-10
 
-Current accepted single-GPU TP1 + MTP3 champion for Qwen3.6-35B-A3B W8A8 on Hygon K100AI.
+Historical single-GPU TP1 + fixed-MTP3 **short-context local-peak release**. The fixed-512 result remains valid, but R269 is superseded as the default deployment profile by R389 because fixed speculative depth is not globally optimal across context lengths.
 
 - Base: accepted R265 cumulative exact kernel/runtime stack.
 - New delta: dedicated M=4 routed-MoE stage-2 config (`BM32/BN32/BK512`, 4 warps, waves2, kpack2, stages1).

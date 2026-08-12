@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${ALLOW_LEGACY_R269:-0}" != "1" ]]; then
-  echo "R269 is superseded for deployment by the R389 adaptive-MTP profile." >&2
-  echo "Use: bash scripts/quickstart.sh" >&2
-  echo "For historical fixed-512 reproduction only, set ALLOW_LEGACY_R269=1." >&2
-  exit 3
-fi
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${MODEL_DIR:?Set MODEL_DIR to the DCU-adapted Qwen3.6-35B-A3B-W8A8-DCU directory}"
 
@@ -15,14 +8,20 @@ IMAGE="${IMAGE:-harbor.sourcefind.cn:5443/dcu/admin/base/custom:vllm018-ubuntu22
 GPU_ID="${GPU_ID:-0}"
 PORT="${PORT:-8000}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
+MTP_CUTOFF="${MTP_CUTOFF:-6144}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.95}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
-CONTAINER_NAME="${CONTAINER_NAME:-qwen36-35b-k100ai-r269-mtp3}"
-CACHE_DIR="${CACHE_DIR:-$ROOT_DIR/.cache/r269-mtp3}"
+CONTAINER_NAME="${CONTAINER_NAME:-qwen36-35b-k100ai-r389-adaptive-mtp}"
+CACHE_DIR="${CACHE_DIR:-$ROOT_DIR/.cache/r389-adaptive-mtp}"
 MODEL_DIR="$(cd "$MODEL_DIR" && pwd)"
-PATCH_DIR="$ROOT_DIR/patches/r269_mtp3"
+PATCH_DIR="$ROOT_DIR/patches/r389_adaptive_mtp"
 MOE_CONFIG="$ROOT_DIR/configs/E=256,N=512,device_name=K100_AI.r269.json"
 DCU_CONFIG_SHA256="b550b28342afd4c61841e2684b06da15f3a0ec3c807ceb22259b0074be9975ae"
+
+if (( MTP_CUTOFF <= 0 || MTP_CUTOFF > MAX_MODEL_LEN )); then
+  echo "ERROR: MTP_CUTOFF must be in 1..MAX_MODEL_LEN (got $MTP_CUTOFF / $MAX_MODEL_LEN)." >&2
+  exit 2
+fi
 
 if command -v sha256sum >/dev/null 2>&1; then
   MODEL_CONFIG_SHA256="$(sha256sum "$MODEL_DIR/config.json" | awk '{print $1}')"
@@ -39,6 +38,8 @@ fi
 mkdir -p "$CACHE_DIR"
 devices=(--device=/dev/kfd --device=/dev/dri)
 [[ -e /dev/mkfd ]] && devices+=(--device=/dev/mkfd)
+
+SPECULATIVE_CONFIG="$(printf '{\"model\":\"/models/qwen36-w8a8\",\"method\":\"qwen3_next_mtp\",\"num_speculative_tokens\":3,\"quantization\":\"compressed-tensors\",\"use_local_argmax_reduction\":true,\"max_model_len\":%s}' "$MTP_CUTOFF")"
 
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
@@ -67,7 +68,7 @@ docker run -d \
   -e K100_RMSNORM_INT8_FUSION=1 \
   -e K100_R235_INT32_EMBEDDING=1 \
   -e K100_R236_M1_NAIVE_MOE=1 \
-  -e K100_R237_MM_DIRECT_EMBED=1 \
+  -e K100_R237_MM_DIRECT_EMBED=0 \
   -e K100_R239_GDN_FULL_SINGLE_SPEC=0 \
   -e K100_R241_GDN_BLOCKTABLE_FUSED=1 \
   -e K100_R243_GDN_SPEC_DIRECT_OUT=0 \
@@ -76,6 +77,8 @@ docker run -d \
   -e K100_R248_MTP_TOP1=1 \
   -e K100_R259_TARGET_GREEDY_TOP1=1 \
   -e K100_R269_SPLIT_MOE_STAGE2=1 \
+  -e K100_R304_DRAFTER_MAX_MODEL_LEN="$MTP_CUTOFF" \
+  -e K100_R305_SPEC_CUTOFF="$MTP_CUTOFF" \
   -e K100_LOG_LINEAR_LAYOUT=0 \
   -e K100_TRACE_LINEAR_SHAPES=0 \
   -v /opt/hyhal:/opt/hyhal:ro \
@@ -106,9 +109,10 @@ docker run -d \
     --cudagraph-capture-sizes 1 4 \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
     --max-num-seqs 32 \
-    --speculative-config '{"model":"/models/qwen36-w8a8","method":"qwen3_next_mtp","num_speculative_tokens":3,"quantization":"compressed-tensors","use_local_argmax_reduction":true}'
+    --speculative-config "$SPECULATIVE_CONFIG"
 
-echo "Started $CONTAINER_NAME on GPU $GPU_ID, port $PORT (R269 + MTP3)."
-echo "Expected fixed-512 hot reference on matching K100AI stack: ~106-107 tok/s."
-echo "MTP throughput is prompt/acceptance-rate dependent; benchmark your own workload."
+echo "Started $CONTAINER_NAME on GPU $GPU_ID, port $PORT."
+echo "Adaptive policy: MTP3 below $MTP_CUTOFF computed tokens; true M1 target decode at/above the cutoff."
+echo "Target max_model_len remains $MAX_MODEL_LEN; no reload or runtime parameter change is required."
+echo "Validated public reference cutoff on K100AI/Qwen3.6-35B-A3B-W8A8-DCU: 6144."
 echo "Follow startup: docker logs -f $CONTAINER_NAME"

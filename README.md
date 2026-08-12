@@ -19,25 +19,28 @@
 
 对于其他海光卡、其他国产AI加速卡和其他模型，**应该复用这套实验方法，而不是照抄最终参数**；对于芯片/软件栈厂商，则可以进一步把真实LLM shape数据库、小M kernel、量化融合、runtime同步审计和自动A/B流程产品化。
 
+- [《Context-Aware Adaptive MTP Scheduling：从局部峰值到完整性能包络》](docs/ADAPTIVE_MTP_SCHEDULING.md)
 - [《面向国产AI加速卡的大模型推理专项优化方法》](docs/面向国产AI加速卡的大模型推理专项优化方法.md)
 - [《200+轮实验：研究路线、失败尝试与结论》](docs/200+轮实验：研究路线、失败尝试与结论.md)
 
 ## 最新版本 / Release History
 
-### 2026-08-10 · R269 — 当前单卡 MTP3 冠军
+### 2026-08-12 · R389 — 当前推荐：上下文感知自适应 MTP
 
-R269 是在此前 200+ 轮优化基础上继续演进的**累计版本**，不是只包含“split MoE stage-2”这一项改动。它继承了前面已经验证并保留的 Decode 小 M W8A8 Linear、INT8 `lm_head`、GDN QKVZ+BA 融合、HCU/Mamba runtime fastpath、GPU-side speculative metadata、RMSNorm/Embedding/GDN/MTP/target verifier 等优化，再增加 **M=4 routed-MoE 第二阶段独立配置**。
+R389 修正了此前发布方法中的一个关键局限：**fixed-512 / 固定 MTP3 的局部峰值不能代表一次加载后的完整上下文性能。** R269 的 106–107 tok/s 仍是有效的短上下文局部峰值，但 512→32K 扫描表明，长上下文继续维持 MTP3 会让 draft + verify 的额外成本超过收益。
 
-R269 解决了一个此前被通用配置掩盖的问题：MTP3 target verification 中 routed-MoE 的两次 GEMM shape 差异很大，不能长期共用同一组 tile。保留 stage-1 的 R265 配置，只针对 stage-2 `K=512` 路径使用独立配置后：
+R389 把它改成服务内部自动调度：
 
-- GPU1 同卡正式 12 轮：**106.32 tok/s mean / 106.30 tok/s median**；
-- GPU7 六轮热态：**107.44 tok/s mean / 107.46 tok/s median**；
-- 相对 GPU1 同卡 R265：**+5.79% mean / +5.72% median**；
-- fixed-512 输出 SHA256 全部一致；
-- 5/5 greedy、5/5 logprob、历史多模态测试均通过；
-- MTP acceptance 计数与参考版本一致，说明收益不是靠改变 speculative 接受率获得的。
+- `< 6144 computed tokens`：MTP3；
+- `>= 6144`：停止 drafter，并清除下一步 speculative placeholders，使 target 回到真正的单 token decode；
+- target `max_model_len=262144` 保持不变；
+- **同一个容器、同一次模型加载自动完成切换，不需要中途改参数或重启。**
 
-**新用户推荐直接复现 R269：**
+10 点 512→32K Decode 曲线：**88.33 / 67.31 / 69.81 / 70.27 / 56.66 / 40.08 / 40.03 / 39.19 / 39.11 / 37.68 tok/s**，平均 **53.29 tok/s**。约 32K natural needle 3/3 PASS，确定性重复输出 SHA256 一致。
+
+同时，后来发现 R237 multimodal direct-embedding shortcut 对 arbitrary-length chunked-prefill tail 存在语义风险，因此 R389 默认显式关闭 R237。
+
+**新用户默认复现 R389：**
 
 ```bash
 git clone https://github.com/DocPang/qwen36-k100ai-w8a8-optimization.git
@@ -46,20 +49,12 @@ python3 -m pip install -U modelscope
 
 MODEL_DIR="$HOME/models/Qwen3.6-35B-A3B-W8A8-DCU" \
 GPU_ID=0 PORT=8000 \
-bash scripts/quickstart_r269.sh
+bash scripts/quickstart.sh
 ```
 
-启动后按与正式验收相同的 fixed-512 口径测试：
+完整方法、曲线和实现说明见 [`docs/ADAPTIVE_MTP_SCHEDULING.md`](docs/ADAPTIVE_MTP_SCHEDULING.md) 与 [`docs/R389_RELEASE_NOTES.md`](docs/R389_RELEASE_NOTES.md)。
 
-```bash
-python3 scripts/benchmark_fixed_512.py \
-  --base http://127.0.0.1:8000 \
-  --model qwen3.6-35b \
-  --rounds 6 \
-  --max-tokens 512
-```
-
-R269 的完整增量说明见 [`docs/R269_RELEASE_NOTES.md`](docs/R269_RELEASE_NOTES.md)，版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。旧版本的实现、成绩和复现方式**全部继续保留在下文**，方便理解整个优化过程和做版本回归。
+> **R269 已降级为历史短上下文 benchmark 版本。** 它的 fixed-512 106–107 tok/s 数据保留用于研究和回归，但不再作为默认长期部署入口。
 
 ### 之前的重要发布节点
 
@@ -70,9 +65,10 @@ R269 的完整增量说明见 [`docs/R269_RELEASE_NOTES.md`](docs/R269_RELEASE_N
 | R184 | MTP3 + INT8 `lm_head` + GDN 等累计优化 | 85.29 tok/s fixed512 median；网页负载最高 107.44 |
 | R199/R202 | 262K + Prefix Cache + 多模态 + Agent runtime | 85.21 tok/s median |
 | R265 | 后续 exact kernel/runtime 累计版本 | ~100.5 tok/s（GPU1） |
-| **R269** | R265 + routed-MoE stage-2 专项配置 | **106.30 tok/s（GPU1） / 107.46 tok/s（GPU7）** |
+| R269 | 固定 MTP3 的短上下文局部峰值（历史 benchmark） | **106.30 tok/s（GPU1） / 107.46 tok/s（GPU7）** |
+| **R389** | **一次加载，自适应 MTP3→no-MTP；512→32K** | **53.29 tok/s 10点均值；6K→32K 约 40→37.68 tok/s 平台** |
 
-> 版本性能必须按同一 workload 比较。MTP 速度会随 prompt 的 speculative acceptance 改变，因此网页工具的随机 prompt 结果不能直接替代 fixed-512 版本仲裁成绩。
+> fixed-512 峰值和完整上下文性能包络是两个不同指标。R389 之后，默认部署版本以**完整 token-length 曲线 + 质量门禁**仲裁，不再用单一短 prompt 峰值代表全局最优。
 
 ---
 
@@ -123,9 +119,9 @@ R184 在 Gated DeltaNet 路径中融合了 QKVZ 与 BA 两组 W8A8 投影，减�
 - R180 无 MTP：CUDAGraph capture size `1`
 - R184 MTP3：CUDAGraph capture size `1 4`
 
-### 1.6 模型原生 MTP3
+### 1.6 历史固定策略：模型原生 MTP3
 
-R184 使用 Qwen 模型自带 MTP head：
+R184/R269 使用 Qwen 模型自带 MTP head，并在整个请求生命周期固定 speculative depth：
 
 ```text
 method = qwen3_next_mtp
@@ -133,7 +129,7 @@ num_speculative_tokens = 3
 quantization = compressed-tensors
 ```
 
-MTP 的最终 token 仍由目标模型验证。实际速度取决于 speculative token 接受率，因此不同提示词的速度会有明显变化。
+MTP 的最终 token 仍由目标模型验证。实际速度取决于 speculative token 接受率，因此不同提示词的速度会有明显变化。后续完整 token-length 曲线进一步证明：**固定 MTP3 也会随上下文长度跨过收益交叉点，因此不能作为全范围默认策略。**
 
 ### 1.7 R199/R202：Prefix Cache / Agent Runtime 快路径
 
@@ -147,9 +143,23 @@ MTP 的最终 token 仍由目标模型验证。实际速度取决于 speculative
 - HCU/Mamba-align 常规 Decode 快路径；
 - accepted-token metadata 直接留在 GPU，删除不再消费的 D2H copy / event / 重复 scratch 开销。
 
-这条路线解决了混合 GDN 模型开启 Prefix Cache 后 Decode 从约 85 tok/s 降到约 73 tok/s 的问题。最终 R202 长期 Agent 配置在保留 Prefix Cache、262K 和多模态的情况下重新回到 **约 85 tok/s**。
+这条路线解决了混合 GDN 模型开启 Prefix Cache 后 Decode 从约 85 tok/s 降到约 73 tok/s 的问题。R202 在固定短上下文口径下重新回到 **约 85 tok/s**，但它仍然采用固定 MTP3，因此现在只作为历史 Agent 路径保留。
 
-公开复现入口：
+### 1.8 R389：上下文感知自适应 MTP
+
+R389 在启动时同时加载 R304/R305 调度补丁。默认 `<6144` 使用 MTP3，达到 cutoff 后让 drafter 退出并清掉后续 speculative placeholders，使 target 自动回到单 token decode。整个过程不重启、不换权重、不修改外部启动参数。
+
+当前 512→32K 验收表明，这种两段式策略可以同时保留短上下文 MTP 收益，并让 6K→32K Decode 稳定在约 **40→37.68 tok/s**。详细原理见 [`docs/ADAPTIVE_MTP_SCHEDULING.md`](docs/ADAPTIVE_MTP_SCHEDULING.md)。
+
+当前默认公开复现入口：
+
+```text
+patches/r389_adaptive_mtp/
+scripts/quickstart.sh
+scripts/serve_r389_adaptive_mtp.sh
+```
+
+历史 R199/R202 复现入口：
 
 ```text
 patches/r199_agent/sitecustomize.py
@@ -178,11 +188,12 @@ scripts/serve_agent_mtp3.sh
 | R184 最高实测 | MTP3 | **107.44 tok/s** |
 | R202 长期 Agent（262K + Prefix + 多模态） | MTP3 | **85.21 tok/s 中位数（GPU0，4轮固定512）** |
 | R265 后续累计 exact 优化 | MTP3 | **约 100.5 tok/s（GPU1 同卡参考）** |
-| **R269 当前冠军** | MTP3 | **106.30 tok/s GPU1 同卡中位；107.46 tok/s GPU7 六轮中位** |
+| R269 历史局部峰值 | 固定 MTP3 | **106.30 tok/s GPU1 同卡中位；107.46 tok/s GPU7 六轮中位** |
+| **R389 当前推荐部署** | **自适应：MTP3 <6144；之后 no-MTP** | **512→32K 10点均值 53.29 tok/s；6K→32K 40.08→37.68 tok/s** |
 
-MTP 速度与提示词接受率有关。部署时建议把 **约 85 tok/s** 视为更保守的稳定参考，而不是把 107 tok/s 当作所有请求的固定速度。
+R269 的 107 tok/s 不能解释为所有上下文长度的固定速度。R389 之后，仓库将 fixed-512 峰值视为**局部性能点**，把完整 token-length 曲线作为默认部署仲裁依据。
 
-R202 与 R184 的测试目标不同：R184 表示 32K、关闭 Prefix Cache 的纯 Decode 高速路径；R202 表示功能完整的长期 Agent 路径。R202 在 GPU0 的4次固定512-token热态复测为 **85.08 / 84.81 / 85.33 / 85.49 tok/s**，四轮输出 SHA256 完全一致。
+R202 与 R184 的历史测试目标不同；它们的 fixed-512 数据仍保留用于回归。R389 则明确面向一次加载后的 512→32K 性能包络。
 
 详细结果见：
 
@@ -432,7 +443,21 @@ bash scripts/serve_agent_mtp3.sh
 - `max_num_batched_tokens=4096`；
 - `restart=unless-stopped`。
 
-该配置是当前推荐的交互式/Agent长期运行方案。若目标只是短上下文纯Decode benchmark，则仍可使用R184脚本。
+该配置现在作为**历史固定 MTP3 Agent 路径**保留，不再是默认推荐。新部署应使用下面的 R389 自适应入口；只有做历史回归时才建议使用 R202/R184。
+
+### 5.7 启动 R389：一次加载，自适应 MTP3 → no-MTP
+
+推荐部署：
+
+```bash
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
+export GPU_ID=0
+export PORT=8000
+
+bash scripts/quickstart.sh
+```
+
+默认 `MTP_CUTOFF=6144`。服务启动后不需要再改任何参数；请求的 computed token 数达到 cutoff 后会在服务内部自动退出 MTP。研究者可以在重新 profile 后通过启动时环境变量覆盖 cutoff，例如 `MTP_CUTOFF=8192`，但 **6144 才是当前公开验收值**。
 
 ---
 
@@ -476,21 +501,28 @@ patches/
   r180_nomtp/sitecustomize.py
   r184_mtp3/sitecustomize.py
   r199_agent/sitecustomize.py
+  r269_mtp3/                  # 历史 fixed-MTP3 峰值
+  r389_adaptive_mtp/          # 当前默认：R304/R305 自适应调度
 
 scripts/
   apply_dcu_config.py
+  quickstart.sh               # 当前默认入口 -> R389
+  serve_r389_adaptive_mtp.sh
   serve_nomtp.sh
-  serve_mtp3.sh
-  serve_agent_mtp3.sh
+  serve_mtp3.sh               # 历史入口
+  serve_agent_mtp3.sh         # 历史入口
   benchmark_openai.py
 
 docs/
+  ADAPTIVE_MTP_SCHEDULING.md
+  R389_RELEASE_NOTES.md
   面向国产AI加速卡的大模型推理专项优化方法.md
   200+轮实验：研究路线、失败尝试与结论.md
 
 results/
   RESULTS.md
   benchmark_summary.json
+  r389_adaptive_curve.json
 ```
 
 ---
@@ -514,6 +546,7 @@ This project optimizes **Qwen3.6-35B-A3B W8A8** for single-GPU, low-concurrency 
 
 The exact kernel parameters are specific to this model/GPU/workload combination, but the project also documents the general optimization methodology and the lessons from 200+ experiments. Other accelerator users should reuse the **profiling, shape-inventory, A/B, quality-gating, runtime and workload methodology**, not blindly copy K100AI-specific tiles.
 
+- [Context-Aware Adaptive MTP Scheduling: from local peak to full performance envelope](docs/ADAPTIVE_MTP_SCHEDULING.md)
 - [General methodology (Chinese): 面向国产AI加速卡的大模型推理专项优化方法](docs/面向国产AI加速卡的大模型推理专项优化方法.md)
 - [200+ experiment review (Chinese): 研究路线、失败尝试与结论](docs/200+轮实验：研究路线、失败尝试与结论.md)
 
@@ -522,17 +555,20 @@ The exact kernel parameters are specific to this model/GPU/workload combination,
 
 ## Latest release / Release history
 
-### 2026-08-10 · R269 — current single-GPU MTP3 champion
+### 2026-08-12 · R389 — recommended deployment: context-aware adaptive MTP
 
-R269 is a **cumulative release built on the previous accepted optimization stack**, not a standalone one-line MoE tweak. It keeps the earlier small-M W8A8 Linear tuning, INT8 `lm_head`, GDN QKVZ+BA fusion, HCU/Mamba runtime fast paths, GPU-side speculative metadata handling, RMSNorm/embedding/GDN/MTP/target-verifier optimizations, and adds a dedicated configuration for the second routed-MoE GEMM used by M=4 target verification.
+R389 corrects a key limitation in the previous public methodology: a **fixed-512 / fixed-MTP3 local peak is not the same thing as the best one-load deployment policy across context lengths**. R269's 106–107 tok/s result remains valid as a short-context local peak, but the 512→32K sweep showed that keeping MTP3 enabled at long context eventually costs more draft + verification work than it saves.
 
-Validated results:
+R389 turns that parameter choice into an in-server scheduling policy:
 
-- GPU1, 12 steady same-card runs: **106.32 tok/s mean / 106.30 tok/s median**;
-- GPU7, 6 hot runs: **107.44 tok/s mean / 107.46 tok/s median**;
-- vs. same-GPU R265: **+5.79% mean / +5.72% median**;
-- fixed-512 SHA identical across validation runs;
-- greedy text, logprobs, historical multimodal validation and MTP acceptance counters unchanged.
+- `< 6144 computed tokens`: MTP3;
+- `>= 6144`: stop the drafter and clear future speculative placeholders so target decoding returns to true single-token decode;
+- target `max_model_len=262144` is unchanged;
+- **one container, one model load, no mid-run parameter rewrite or restart.**
+
+The validated 10-point 512→32K Decode curve is **88.33 / 67.31 / 69.81 / 70.27 / 56.66 / 40.08 / 40.03 / 39.19 / 39.11 / 37.68 tok/s**, with a **53.29 tok/s** mean. Natural ~32K needle retrieval passed 3/3, and deterministic repeated outputs had identical SHA256.
+
+R389 also disables the historical R237 multimodal direct-embedding shortcut by default because later arbitrary-length chunked-prefill-tail testing exposed semantic risk.
 
 Recommended reproduction for new users:
 
@@ -541,19 +577,12 @@ git clone https://github.com/DocPang/qwen36-k100ai-w8a8-optimization.git
 cd qwen36-k100ai-w8a8-optimization
 python3 -m pip install -U modelscope
 MODEL_DIR="$HOME/models/Qwen3.6-35B-A3B-W8A8-DCU" GPU_ID=0 PORT=8000 \
-  bash scripts/quickstart_r269.sh
+  bash scripts/quickstart.sh
 ```
 
-Benchmark with the same fixed workload used for release arbitration:
+See [`docs/ADAPTIVE_MTP_SCHEDULING.md`](docs/ADAPTIVE_MTP_SCHEDULING.md) and [`docs/R389_RELEASE_NOTES.md`](docs/R389_RELEASE_NOTES.md) for the implementation and research path.
 
-```bash
-python3 scripts/benchmark_fixed_512.py \
-  --base http://127.0.0.1:8000 \
-  --model qwen3.6-35b \
-  --rounds 6 --max-tokens 512
-```
-
-See [`docs/R269_RELEASE_NOTES.md`](docs/R269_RELEASE_NOTES.md) for the R269 delta and [`CHANGELOG.md`](CHANGELOG.md) for the release history. **All previous optimization explanations and reproduction paths are intentionally retained below** so the repository documents the full evolution rather than only the newest patch.
+> **R269 is now a historical short-context benchmark release.** Its fixed-512 106–107 tok/s numbers are retained for research and regression, but it is no longer the default deployment entry point.
 
 | Release | Stage | Representative decode |
 |---|---|---:|
@@ -562,7 +591,8 @@ See [`docs/R269_RELEASE_NOTES.md`](docs/R269_RELEASE_NOTES.md) for the R269 delt
 | R184 | cumulative MTP3 hot path | 85.29 tok/s fixed512 median; workload peak 107.44 |
 | R199/R202 | 262K + Prefix Cache + multimodal Agent profile | 85.21 tok/s median |
 | R265 | later exact kernel/runtime stack | ~100.5 tok/s on GPU1 |
-| **R269** | R265 + routed-MoE stage-2 specialization | **106.30 GPU1 / 107.46 GPU7 median** |
+| R269 | fixed-MTP3 short-context local peak (historical benchmark) | **106.30 GPU1 / 107.46 GPU7 median** |
+| **R389** | **single-load adaptive MTP3→no-MTP, 512→32K** | **53.29 tok/s 10-point mean; 6K→32K plateau 40.08→37.68** |
 
 ---
 
@@ -611,9 +641,9 @@ Final settings:
 - R180 no-MTP: CUDAGraph capture size `1`
 - R184 MTP3: CUDAGraph capture sizes `1 4`
 
-### 1.6 Native Qwen MTP3
+### 1.6 Historical fixed policy: native Qwen MTP3
 
-R184 uses the model's own MTP head:
+R184/R269 use the model's own MTP head with a fixed speculative depth for the whole request:
 
 ```text
 method = qwen3_next_mtp
@@ -621,15 +651,29 @@ num_speculative_tokens = 3
 quantization = compressed-tensors
 ```
 
-Speculative tokens are still verified by the target model. Throughput therefore depends on acceptance rate.
+Speculative tokens are still verified by the target model. Throughput therefore depends on acceptance rate. The later full token-length sweep also showed that fixed MTP3 crosses a context-length profitability boundary, so it should not be treated as the default full-range policy.
 
 ### 1.7 R199/R202 Agent runtime path
 
 The long-context Agent profile adds 262K context, Prefix Cache, Tool Calling and multimodal support. R199 removes redundant D2H/event work from the common hybrid-GDN/Mamba-align decode path and keeps accepted-token metadata on GPU. R202 combines that runtime fastpath with `max_num_batched_tokens=4096` and MTP3.
 
-This recovers the Prefix-Cache Agent path from roughly 73 tok/s back to roughly 85 tok/s while retaining the full Agent feature set.
+This recovered the historical Prefix-Cache Agent path from roughly 73 tok/s back to roughly 85 tok/s on the fixed short-context workload, but it still uses fixed MTP3 and is now retained as a regression profile.
 
-Public entry points:
+### 1.8 R389 context-aware adaptive MTP
+
+R389 loads the R304/R305 scheduling patches once at startup. Below 6,144 computed tokens it uses MTP3; at the cutoff the drafter exits and future speculative placeholders are cleared, returning the target to normal single-token decode without a restart or parameter rewrite.
+
+The validated 512→32K sweep preserves short-context MTP acceleration while keeping the 6K→32K region near **40→37.68 tok/s**. See [`docs/ADAPTIVE_MTP_SCHEDULING.md`](docs/ADAPTIVE_MTP_SCHEDULING.md).
+
+Current public entry points:
+
+```text
+patches/r389_adaptive_mtp/
+scripts/quickstart.sh
+scripts/serve_r389_adaptive_mtp.sh
+```
+
+Historical R199/R202 entry points:
 
 ```text
 patches/r199_agent/sitecustomize.py
@@ -657,9 +701,10 @@ Test conditions:
 | R184 peak observed | MTP3 | **107.44 tok/s** |
 | R202 long-context Agent profile (262K + prefix cache + multimodal) | MTP3 | **85.21 tok/s median, 4 fixed-512 runs on GPU0** |
 | R265 later cumulative exact stack | MTP3 | **~100.5 tok/s on GPU1** |
-| **R269 current champion** | MTP3 | **106.30 tok/s GPU1 median; 107.46 tok/s GPU7 median** |
+| R269 historical local peak | fixed MTP3 | **106.30 tok/s GPU1 median; 107.46 tok/s GPU7 median** |
+| **R389 recommended deployment** | **adaptive: MTP3 <6144; no-MTP afterwards** | **53.29 tok/s 10-point 512→32K mean; 6K→32K 40.08→37.68 tok/s** |
 
-For production planning, ~85 tok/s is a more conservative MTP3 reference than the 107 tok/s peak. R202 is the current full-feature Agent profile; the four GPU0 runs were 85.08 / 84.81 / 85.33 / 85.49 tok/s with identical output SHA256.
+The 107 tok/s R269 result should not be interpreted as a constant speed across context lengths. Starting with R389, fixed-512 peaks are treated as local performance points; the default deployment decision is based on the full token-length curve plus quality gates.
 
 See:
 
@@ -875,7 +920,20 @@ export PORT=8000
 bash scripts/serve_agent_mtp3.sh
 ```
 
-The default profile enables R199 runtime fastpaths, MTP3, 262K context, Prefix Cache, multimodal support, Tool Calling, and `max_num_batched_tokens=4096`.
+This historical profile enables R199 runtime fastpaths, fixed MTP3, 262K context, Prefix Cache, multimodal support, Tool Calling, and `max_num_batched_tokens=4096`. It is retained for regression, not as the default deployment recommendation.
+
+### 5.7 R389 single-load adaptive MTP3 -> no-MTP
+
+Recommended deployment:
+
+```bash
+export MODEL_DIR=/path/to/Qwen3.6-35B-A3B-W8A8-DCU
+export GPU_ID=0
+export PORT=8000
+bash scripts/quickstart.sh
+```
+
+The validated default is `MTP_CUTOFF=6144`. No runtime parameter change is needed after startup: once a request reaches the cutoff, the in-server scheduler automatically exits speculation for subsequent decode steps. Researchers may override the cutoff at startup after profiling their own hardware, but **6144 is the currently validated public value**.
 
 ---
 

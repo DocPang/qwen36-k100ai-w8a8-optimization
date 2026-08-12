@@ -1,6 +1,9 @@
 # R269 release notes
 
-R269 is the current validated single-GPU TP1 + MTP3 performance release for Qwen3.6-35B-A3B W8A8 on Hygon K100AI / gfx928.
+> [!WARNING]
+> **Superseded for deployment by R389 (2026-08-12).** R269 remains a valid historical fixed-512 / fixed-MTP3 short-context local-peak result, but it should not be interpreted as the globally optimal one-load policy across context lengths. New users should use `scripts/quickstart.sh` and read `docs/R389_RELEASE_NOTES.md`.
+
+R269 is the historical validated single-GPU TP1 + fixed-MTP3 short-context performance release for Qwen3.6-35B-A3B W8A8 on Hygon K100AI / gfx928.
 
 ## What changed
 

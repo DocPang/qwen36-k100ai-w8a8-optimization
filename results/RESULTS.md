@@ -14,11 +14,33 @@ Hardware: **Hygon K100AI (gfx928)**, one GPU, TP=1, single concurrency.
 | R184 | MTP3 | 107.44 tok/s peak | one high-acceptance prompt length |
 | R202 Agent profile | MTP3 | **85.21 tok/s median** | 4 fixed 512-token GPU0 runs; 262K + Prefix Cache + multimodal |
 | R265 | MTP3 | **~100.55 tok/s median** | GPU1 same-card pre-R269 reference |
-| **R269** | MTP3 | **106.30 tok/s GPU1 median / 107.46 tok/s GPU7 median** | current accepted single-GPU champion |
+| R269 | fixed MTP3 | **106.30 tok/s GPU1 median / 107.46 tok/s GPU7 median** | historical fixed-512 local peak |
+| **R389** | **adaptive MTP3 <6144; no-MTP afterwards** | **53.29 tok/s mean across 512→32K** | current recommended one-load deployment curve |
+
+## R389 adaptive release — 2026-08-12
+
+R389 changes the optimization objective from a single fixed-512 peak to the full token-length performance envelope. It uses MTP3 below 6,144 computed tokens, then stops the drafter and clears future speculative placeholders so the target returns to true single-token decode without reloading the model.
+
+| Prompt tokens | Decode tok/s |
+|---:|---:|
+| 512 | 88.33 |
+| 1,024 | 67.31 |
+| 2,048 | 69.81 |
+| 3,072 | 70.27 |
+| 4,096 | 56.66 |
+| 6,144 | 40.08 |
+| 8,192 | 40.03 |
+| 12,288 | 39.19 |
+| 16,384 | 39.11 |
+| 32,768 | 37.68 |
+
+Mean Decode: **53.29 tok/s**. Natural ~32K needle retrieval passed 3/3, and deterministic repeated outputs had identical SHA256. Full notes: [`../docs/R389_RELEASE_NOTES.md`](../docs/R389_RELEASE_NOTES.md).
+
+The fixed-512 106–107 tok/s result below remains valid as a short-context local peak, but is no longer used as the default deployment conclusion.
 
 ## R269 release — 2026-08-10
 
-R269 is the current cumulative TP1 + MTP3 release. It retains the previously accepted exact kernel/runtime stack and changes only the M=4 routed-MoE second GEMM to use a stage-2-specific configuration.
+R269 is the historical cumulative TP1 + fixed-MTP3 short-context release. It retains the previously accepted exact kernel/runtime stack and changes only the M=4 routed-MoE second GEMM to use a stage-2-specific configuration.
 
 Formal GPU1 arbitration:
 
@@ -96,4 +118,6 @@ An older June report recorded 12.55 tok/s for single-card/no-MTP. We preserve th
 - R180's two dominant `M=1` projection kernels were numerically identical to the reference kernel in microbenchmarks (`relative-L2 = 0`).
 - No-MTP and MTP3 are separate inference modes and are **not** claimed to produce byte-identical generations to each other.
 - R202 fixed-512 GPU0 validation produced identical output SHA256 across all four hot runs.
+- R389 exact-string, arithmetic and extraction gates passed; deterministic repeat produced one unique SHA256 across 3 runs; natural ~32K needle retrieval passed 3/3.
+- R389 disables R237 by default because later arbitrary-length chunked-prefill-tail validation exposed semantic risk in that shortcut.
 - The 4096/8192 compile-range experiments showed that deterministic `temperature=0` text can still diverge on near-tie tokens when the compiled numeric path changes; therefore structured output, Tool Calling and task-level gates remain part of deployment validation.

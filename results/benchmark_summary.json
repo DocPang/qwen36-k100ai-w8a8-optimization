@@ -2,7 +2,7 @@
   "hardware": "Hygon K100AI (gfx928)",
   "tp": 1,
   "concurrency": 1,
-  "date": "2026-08-10",
+  "date": "2026-08-12",
   "upstream_hot_baseline_nomtp_tok_s": 19.873,
   "historical_june_nomtp_tok_s": 12.55,
   "r180_nomtp": {
@@ -36,7 +36,9 @@
     "MTP throughput is prompt/acceptance-rate dependent",
     "R184 and R202 target different deployment profiles and should not be treated as identical benchmark configurations",
     "K100 and K100AI are different products; tests used K100AI only",
-    "R269 is cumulative; previous R180/R184/R202 results remain preserved for historical reproduction and regression testing"
+    "R269 is cumulative; previous R180/R184/R202 results remain preserved for historical reproduction and regression testing",
+    "R269 fixed-512 remains a valid short-context local peak but is superseded as the default deployment profile by R389",
+    "R389 is validated across 512 to 32K; target max_model_len remains 262144 but R389 is not yet claimed as the formal 262K full-range champion"
   ],
   "r265_mtp3_same_gpu1_reference": {
     "mean_tok_s": 100.4988,
@@ -47,7 +49,7 @@
     ]
   },
   "r269_mtp3": {
-    "status": "current accepted single-GPU champion",
+    "status": "historical fixed-MTP3 short-context local peak",
     "gpu1_12run_mean_tok_s": 106.3198,
     "gpu1_12run_median_tok_s": 106.2957,
     "gpu1_range_tok_s": [
@@ -76,5 +78,25 @@
     },
     "release_notes": "docs/R269_RELEASE_NOTES.md"
   },
-  "latest_release": "R269"
+  "r389_adaptive_mtp": {
+    "status": "current recommended deployment profile; validated 512-to-32K curve",
+    "target_max_model_len": 262144,
+    "mtp_cutoff_computed_tokens": 6144,
+    "policy_below_cutoff": "MTP3",
+    "policy_at_or_above_cutoff": "no-MTP target single-token decode",
+    "prompt_tokens": [512, 1024, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 32768],
+    "decode_tok_s": [88.33, 67.31, 69.81, 70.27, 56.66, 40.08, 40.03, 39.19, 39.11, 37.68],
+    "mean_decode_tok_s": 53.29,
+    "quality_gates": {
+      "exact_string": "PASS",
+      "arithmetic": "PASS",
+      "code_extraction": "PASS",
+      "deterministic_repeat_3x": "identical SHA256",
+      "natural_32k_needle": "3/3 PASS"
+    },
+    "r237_mm_direct_embed_default": false,
+    "release_notes": "docs/R389_RELEASE_NOTES.md",
+    "methodology": "docs/ADAPTIVE_MTP_SCHEDULING.md"
+  },
+  "latest_release": "R389"
 }
